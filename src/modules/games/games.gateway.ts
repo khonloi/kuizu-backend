@@ -69,8 +69,8 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
         quiz.questions,
       );
 
-      client.join(`host:${session.pin}`);
-      client.join(`game:${session.pin}`);
+      void client.join(`host:${session.pin}`);
+      void client.join(`game:${session.pin}`);
 
       this.logger.log(`Host created game session PIN: ${session.pin} for quiz: ${quiz.title}`);
 
@@ -97,7 +97,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return result;
     }
 
-    client.join(`game:${pin}`);
+    void client.join(`game:${pin}`);
 
     const session = this.gameStateStore.getSession(pin)!;
 

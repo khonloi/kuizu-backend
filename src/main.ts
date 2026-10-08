@@ -14,6 +14,14 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 4000;
   const clientUrl = configService.get<string>('CLIENT_URL') || 'http://localhost:3001';
+  const corsAllowedOrigins = configService.get<string>('CORS_ALLOWED_ORIGINS');
+
+  // Compute allowed CORS origins dynamically
+  const allowedOrigins: string[] = corsAllowedOrigins
+    ? corsAllowedOrigins.split(',').map((origin) => origin.trim()).filter(Boolean)
+    : configService.get<string>('NODE_ENV') === 'production'
+      ? [clientUrl]
+      : Array.from(new Set([clientUrl, 'http://localhost:3000', 'http://localhost:3001']));
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -31,7 +39,7 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: [clientUrl, 'http://localhost:3000', 'http://localhost:3001'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
@@ -62,4 +70,4 @@ async function bootstrap() {
   logger.log(`🎮 Socket.IO Gateway listening on namespace: /game`);
 }
 
-bootstrap();
+void bootstrap();
