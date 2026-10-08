@@ -1,0 +1,41 @@
+services:
+  kuizu-mongo:
+    image: mongo:7.0
+    container_name: kuizu-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  kuizu-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kuizu-backend
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    depends_on:
+      kuizu-mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      CLIENT_URL: http://localhost:3001
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
+      MONGODB_URI: mongodb://kuizu-mongo:27017/kuizu
+      JWT_ACCESS_SECRET: kuizu_super_secret_access_key_2026_dev
+      JWT_REFRESH_SECRET: kuizu_super_secret_refresh_key_2026_dev
+      JWT_ACCESS_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 7d
+
+volumes:
+  mongo-data:
+    driver: local

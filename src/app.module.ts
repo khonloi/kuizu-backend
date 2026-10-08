@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
+import { randomUUID } from 'node:crypto';
 
 import { validateEnv } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -21,6 +23,37 @@ import { DatabaseModule } from './database/database.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
+    }),
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
+        return {
+          pinoHttp: {
+            level: isProduction ? 'info' : 'debug',
+            transport: isProduction
+              ? undefined
+              : {
+                  target: 'pino-pretty',
+                  options: {
+                    colorize: true,
+                    singleLine: true,
+                    translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
+                    ignore: 'pid,hostname',
+                  },
+                },
+            autoLogging: true,
+            genReqId: (req, res) => {
+              const existing = req.headers['x-request-id'];
+              const id = (existing as string) || randomUUID();
+              res.setHeader('X-Request-Id', id);
+              return id;
+            },
+          },
+        };
+      },
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],

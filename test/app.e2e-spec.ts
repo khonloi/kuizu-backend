@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppModule } from './../src/app.module';
 
 describe('HealthController (e2e)', () => {
@@ -24,6 +25,18 @@ describe('HealthController (e2e)', () => {
         expect(res.body).toHaveProperty('status');
         expect(res.body).toHaveProperty('services');
         expect(res.body.services).toHaveProperty('api');
+        expect(res.headers).toHaveProperty('x-request-id');
+      });
+  });
+
+  it('/api/health (GET) with custom X-Request-Id', () => {
+    const customReqId = 'custom-trace-uuid-12345';
+    return request(app.getHttpServer())
+      .get('/api/health')
+      .set('X-Request-Id', customReqId)
+      .expect(200)
+      .expect((res) => {
+        expect(res.headers['x-request-id']).toBe(customReqId);
       });
   });
 

@@ -35,7 +35,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
-    } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+    } else if (
+      typeof exceptionResponse === 'object' &&
+      exceptionResponse !== null
+    ) {
       const respObj = exceptionResponse as Record<string, unknown>;
       message = (respObj.message as string) || message;
       errors = respObj.errors;
@@ -43,9 +46,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    const requestId =
+      (request.headers['x-request-id'] as string) ||
+      (request as unknown as { id?: string }).id;
+
     if (status >= 500) {
       this.logger.error(
-        `HTTP ${status} [${request.method}] ${request.url}: ${message}`,
+        `HTTP ${status} [${request.method}] ${request.url} [reqId: ${requestId || 'N/A'}]: ${message}`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
@@ -54,6 +61,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
+      ...(requestId ? { requestId } : {}),
       message,
       ...(errors ? { errors } : {}),
     });
