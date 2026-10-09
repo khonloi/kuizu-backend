@@ -19,13 +19,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
           configService.get<string>('JWT_ACCESS_SECRET') ||
           'kuizu_super_secret_access_key_2026',
         signOptions: {
-          expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m') as any,
+          expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRATION') ||
+            '15m') as any,
         },
       }),
     }),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtStrategy, PassportModule],
+  exports: [AuthService, JwtStrategy, PassportModule, JwtModule],
 })
 export class AuthModule {}

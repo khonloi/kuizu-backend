@@ -9,9 +9,20 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { GameStateStore, PlayerState, LiveGameSession } from './game-state.store';
+import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import {
+  GameStateStore,
+  PlayerState,
+  LiveGameSession,
+} from './game-state.store';
 import { QuizzesService } from '../quizzes/quizzes.service';
 import { QuizChoice } from '../quizzes/schemas/quiz.schema';
+import {
+  GameSession,
+  GameSessionDocument,
+} from './schemas/game-session.schema';
 
 @WebSocketGateway({
   cors: {
@@ -28,10 +39,34 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly gameStateStore: GameStateStore,
     private readonly quizzesService: QuizzesService,
+    private readonly jwtService: JwtService,
+    @InjectModel(GameSession.name)
+    private readonly gameSessionModel: Model<GameSessionDocument>,
   ) {}
 
   handleConnection(client: Socket) {
-    this.logger.log(`Socket connected: ${client.id}`);
+    try {
+      const authHeader =
+        (client.handshake.auth?.token as string) ||
+        (client.handshake.headers?.authorization as string);
+
+      if (authHeader) {
+        const token = authHeader.startsWith('Bearer ')
+          ? authHeader.slice(7).trim()
+          : authHeader;
+        const payload = this.jwtService.verify(token);
+        client.data.user = payload;
+        this.logger.log(
+          `Socket authenticated: ${client.id} (user: ${payload.username || payload.sub})`,
+        );
+      } else {
+        this.logger.log(`Socket connected as guest: ${client.id}`);
+      }
+    } catch {
+      this.logger.log(
+        `Socket connected with invalid/expired token: ${client.id}`,
+      );
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -62,17 +97,22 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { success: false, message: 'Quiz has no questions' };
       }
 
+      const hostUserId = client.data?.user?.id || client.data?.user?.sub;
+
       const session = this.gameStateStore.createSession(
         client.id,
         quiz._id.toString(),
         quiz.title,
         quiz.questions,
+        hostUserId,
       );
 
       void client.join(`host:${session.pin}`);
       void client.join(`game:${session.pin}`);
 
-      this.logger.log(`Host created game session PIN: ${session.pin} for quiz: ${quiz.title}`);
+      this.logger.log(
+        `Host created game session PIN: ${session.pin} for quiz: ${quiz.title}`,
+      );
 
       return {
         success: true,
@@ -127,7 +167,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('host:next')
-  handleHostNext(@ConnectedSocket() client: Socket) {
+  async handleHostNext(@ConnectedSocket() client: Socket) {
     const session = this.gameStateStore.getSessionByHost(client.id);
     if (!session) {
       return { success: false, message: 'Session not found for host' };
@@ -206,7 +246,9 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     session.state = 'reveal';
     const currentQuestion = session.questions[session.currentQuestionIndex];
-    const correctChoice = currentQuestion.choices.find((c: QuizChoice) => c.isCorrect);
+    const correctChoice = currentQuestion.choices.find(
+      (c: QuizChoice) => c.isCorrect,
+    );
 
     const leaderboard = this.gameStateStore.getLeaderboard(session.pin);
 
@@ -219,12 +261,38 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { success: true };
   }
 
-  private finishGame(session: LiveGameSession) {
+  private async finishGame(session: LiveGameSession) {
     session.state = 'ended';
     const finalLeaderboard = this.gameStateStore.getLeaderboard(session.pin);
     const podium = finalLeaderboard.slice(0, 3);
 
-    this.quizzesService.incrementPlayCount(session.quizId).catch(() => null);
+    void this.quizzesService
+      .incrementPlayCount(session.quizId)
+      .catch(() => null);
+
+    try {
+      const hostObjectId =
+        session.hostUserId && Types.ObjectId.isValid(session.hostUserId)
+          ? new Types.ObjectId(session.hostUserId)
+          : null;
+
+      if (Types.ObjectId.isValid(session.quizId)) {
+        await this.gameSessionModel.create({
+          pin: session.pin,
+          host: hostObjectId,
+          quiz: new Types.ObjectId(session.quizId),
+          quizTitle: session.quizTitle,
+          players: finalLeaderboard.map((p, idx) => ({
+            nickname: p.nickname,
+            score: p.score,
+            rank: idx + 1,
+          })),
+          status: 'completed',
+        });
+      }
+    } catch (err) {
+      this.logger.error('Failed to save game session history', err);
+    }
 
     this.server.to(`game:${session.pin}`).emit('game:ended', {
       podium,

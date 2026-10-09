@@ -8,12 +8,23 @@ import {
   Param,
   Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { QuizzesService } from './quizzes.service';
-import { CreateQuizDto, createQuizSchema } from './dto/quiz.dto';
+import {
+  CreateQuizDto,
+  createQuizSchema,
+  UpdateQuizDto,
+  updateQuizSchema,
+} from './dto/quiz.dto';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ApiTags('Quizzes')
 @Controller('quizzes')
@@ -32,6 +43,14 @@ export class QuizzesController {
   @ApiOperation({ summary: 'Get quizzes created by logged-in user' })
   async findMyQuizzes(@CurrentUser('id') userId: string) {
     return this.quizzesService.findAll(true, userId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('admin')
+  @Get('admin/all')
+  @ApiOperation({ summary: 'List all quizzes including private (Admin only)' })
+  async findAllAdmin() {
+    return this.quizzesService.findAllAdmin();
   }
 
   @Public()
@@ -58,9 +77,11 @@ export class QuizzesController {
   async update(
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
-    @Body() dto: Partial<CreateQuizDto>,
+    @CurrentUser('role') userRole: string,
+    @Body(new ZodValidationPipe(updateQuizSchema)) dto: UpdateQuizDto,
   ) {
-    return this.quizzesService.update(id, userId, dto);
+    const isAdmin = userRole === 'admin';
+    return this.quizzesService.update(id, userId, dto, isAdmin);
   }
 
   @ApiBearerAuth()
@@ -69,7 +90,9 @@ export class QuizzesController {
   async delete(
     @Param('id') id: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') userRole: string,
   ) {
-    return this.quizzesService.delete(id, userId);
+    const isAdmin = userRole === 'admin';
+    return this.quizzesService.delete(id, userId, isAdmin);
   }
 }

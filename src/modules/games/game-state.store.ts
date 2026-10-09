@@ -13,6 +13,7 @@ export interface PlayerState {
 export interface LiveGameSession {
   pin: string;
   hostSocketId: string;
+  hostUserId?: string;
   quizId: string;
   quizTitle: string;
   questions: QuizQuestion[];
@@ -35,11 +36,18 @@ export class GameStateStore {
     return pin;
   }
 
-  createSession(hostSocketId: string, quizId: string, quizTitle: string, questions: QuizQuestion[]): LiveGameSession {
+  createSession(
+    hostSocketId: string,
+    quizId: string,
+    quizTitle: string,
+    questions: QuizQuestion[],
+    hostUserId?: string,
+  ): LiveGameSession {
     const pin = this.generatePin();
     const session: LiveGameSession = {
       pin,
       hostSocketId,
+      hostUserId,
       quizId,
       quizTitle,
       questions,
@@ -62,7 +70,11 @@ export class GameStateStore {
     return pin ? this.sessions.get(pin) : undefined;
   }
 
-  addPlayer(pin: string, socketId: string, nickname: string): { success: boolean; message?: string; player?: PlayerState } {
+  addPlayer(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): { success: boolean; message?: string; player?: PlayerState } {
     const session = this.sessions.get(pin);
     if (!session) {
       return { success: false, message: 'Game PIN not found' };
@@ -74,7 +86,10 @@ export class GameStateStore {
     // Check duplicate nickname
     for (const p of session.players.values()) {
       if (p.nickname.toLowerCase() === nickname.toLowerCase().trim()) {
-        return { success: false, message: 'Nickname already taken in this room' };
+        return {
+          success: false,
+          message: 'Nickname already taken in this room',
+        };
       }
     }
 
@@ -95,7 +110,12 @@ export class GameStateStore {
     pin: string,
     socketId: string,
     choiceId: string,
-  ): { success: boolean; isCorrect: boolean; pointsEarned: number; newScore: number } {
+  ): {
+    success: boolean;
+    isCorrect: boolean;
+    pointsEarned: number;
+    newScore: number;
+  } {
     const session = this.sessions.get(pin);
     if (!session || session.state !== 'question') {
       return { success: false, isCorrect: false, pointsEarned: 0, newScore: 0 };
@@ -103,7 +123,12 @@ export class GameStateStore {
 
     const player = session.players.get(socketId);
     if (!player || player.answeredCurrent) {
-      return { success: false, isCorrect: false, pointsEarned: 0, newScore: player?.score || 0 };
+      return {
+        success: false,
+        isCorrect: false,
+        pointsEarned: 0,
+        newScore: player?.score || 0,
+      };
     }
 
     const currentQuestion = session.questions[session.currentQuestionIndex];
@@ -111,14 +136,19 @@ export class GameStateStore {
       return { success: false, isCorrect: false, pointsEarned: 0, newScore: 0 };
     }
 
-    const selectedChoice = currentQuestion.choices.find((c: QuizChoice) => c.id === choiceId);
+    const selectedChoice = currentQuestion.choices.find(
+      (c: QuizChoice) => c.id === choiceId,
+    );
     const isCorrect = !!selectedChoice?.isCorrect;
 
     let pointsEarned = 0;
     if (isCorrect) {
       const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
       const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
-      const timeRemainingRatio = Math.max(0, (timeLimitMs - timeElapsed) / timeLimitMs);
+      const timeRemainingRatio = Math.max(
+        0,
+        (timeLimitMs - timeElapsed) / timeLimitMs,
+      );
 
       // Kahoot speed formula: base 50% + up to 50% for fast response + streak bonus
       const basePoints = currentQuestion.points || 1000;
@@ -158,7 +188,11 @@ export class GameStateStore {
       .sort((a, b) => b.score - a.score);
   }
 
-  removeSocket(socketId: string): { pin?: string; wasHost: boolean; nickname?: string } {
+  removeSocket(socketId: string): {
+    pin?: string;
+    wasHost: boolean;
+    nickname?: string;
+  } {
     if (this.hostToPin.has(socketId)) {
       const pin = this.hostToPin.get(socketId)!;
       this.sessions.delete(pin);
