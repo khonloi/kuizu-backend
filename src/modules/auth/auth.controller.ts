@@ -1,16 +1,30 @@
+import { Controller, Post, Body, Res, Req, Get } from '@nestjs/common';
 import {
-  Controller,
-  Post,
-  Body,
-  Res,
-  Req,
-  Get,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, registerSchema, loginSchema } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  ChangePasswordDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  registerSchema,
+  loginSchema,
+  changePasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from '../users/users.service';
@@ -70,7 +84,9 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
-  @ApiOperation({ summary: 'Refresh access token using refresh cookie or body' })
+  @ApiOperation({
+    summary: 'Refresh access token using refresh cookie or body',
+  })
   async refresh(
     @Req() req: Request,
     @Body('refreshToken') bodyToken: string,
@@ -95,5 +111,57 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user info' })
   async getMe(@CurrentUser('id') userId: string) {
     return this.usersService.getProfile(userId);
+  }
+
+  @ApiBearerAuth()
+  @Post('change-password')
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiResponse({ status: 200, description: 'Password successfully changed' })
+  async changePassword(
+    @CurrentUser('id') userId: string,
+    @Body(new ZodValidationPipe(changePasswordSchema)) dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @ApiOperation({ summary: 'Verify email with token' })
+  @ApiResponse({ status: 200, description: 'Email successfully verified' })
+  async verifyEmail(
+    @Body(new ZodValidationPipe(verifyEmailSchema)) dto: VerifyEmailDto,
+  ) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend email verification token' })
+  @ApiResponse({ status: 200, description: 'Verification email sent' })
+  async resendVerification(
+    @Body(new ZodValidationPipe(resendVerificationSchema))
+    dto: ResendVerificationDto,
+  ) {
+    return this.authService.resendVerification(dto);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset token via email' })
+  @ApiResponse({ status: 200, description: 'Reset password link processed' })
+  async forgotPassword(
+    @Body(new ZodValidationPipe(forgotPasswordSchema)) dto: ForgotPasswordDto,
+  ) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password using token' })
+  @ApiResponse({ status: 200, description: 'Password successfully reset' })
+  async resetPassword(
+    @Body(new ZodValidationPipe(resetPasswordSchema)) dto: ResetPasswordDto,
+  ) {
+    return this.authService.resetPassword(dto);
   }
 }

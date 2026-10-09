@@ -34,7 +34,10 @@ export class User {
   @Prop({ default: 0 })
   xp: number;
 
-  @Prop({ type: StreakInfoSchema, default: () => ({ count: 0, lastActiveDate: null }) })
+  @Prop({
+    type: StreakInfoSchema,
+    default: () => ({ count: 0, lastActiveDate: null }),
+  })
   streak: StreakInfo;
 
   @Prop({ default: 5, min: 0, max: 5 })
@@ -43,9 +46,35 @@ export class User {
   @Prop({ default: 100 })
   gems: number;
 
-  @Prop({ default: 'bronze', enum: ['bronze', 'silver', 'gold', 'sapphire', 'ruby', 'diamond'] })
+  @Prop({
+    default: 'bronze',
+    enum: ['bronze', 'silver', 'gold', 'sapphire', 'ruby', 'diamond'],
+  })
   league: string;
+
+  @Prop({ default: 0, min: 0 })
+  streakFreezes: number;
+
+  @Prop({ default: true })
+  isActive: boolean;
+
+  @Prop({ default: false })
+  isEmailVerified: boolean;
+
+  @Prop({ type: String, default: null })
+  emailVerificationToken?: string | null;
+
+  @Prop({ type: Date, default: null })
+  emailVerificationExpires?: Date | null;
+
+  @Prop({ type: String, default: null })
+  passwordResetToken?: string | null;
+
+  @Prop({ type: Date, default: null })
+  passwordResetExpires?: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ xp: -1 });
+UserSchema.index({ emailVerificationToken: 1 }, { sparse: true });
+UserSchema.index({ passwordResetToken: 1 }, { sparse: true });
