@@ -33,6 +33,16 @@ import { DatabaseModule } from './database/database.module';
         return {
           pinoHttp: {
             level: isProduction ? 'info' : 'debug',
+            redact: {
+              paths: [
+                'req.headers.authorization',
+                'req.headers.cookie',
+                'req.body.password',
+                'req.body.currentPassword',
+                'req.body.newPassword',
+              ],
+              censor: '[REDACTED]',
+            },
             transport: isProduction
               ? undefined
               : {

@@ -41,8 +41,9 @@ export class AuthService {
       throw new ConflictException('Username already taken');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 12);
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedVerificationToken = this.hashToken(verificationToken);
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     const user = await this.usersService.create({
@@ -52,7 +53,7 @@ export class AuthService {
       role: 'user',
       isActive: true,
       isEmailVerified: false,
-      emailVerificationToken: verificationToken,
+      emailVerificationToken: hashedVerificationToken,
       emailVerificationExpires,
     });
 
@@ -168,7 +169,7 @@ export class AuthService {
       throw new UnauthorizedException('Incorrect current password');
     }
 
-    const newPasswordHash = await bcrypt.hash(dto.newPassword, 10);
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.usersService.updatePassword(userId, newPasswordHash);
 
     return {
@@ -178,7 +179,8 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const user = await this.usersService.findByVerificationToken(dto.token);
+    const hashedToken = this.hashToken(dto.token);
+    const user = await this.usersService.findByVerificationToken(hashedToken);
     if (!user) {
       throw new BadRequestException('Invalid or expired verification token');
     }
@@ -216,10 +218,11 @@ export class AuthService {
     }
 
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = this.hashToken(verificationToken);
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await this.usersService.setEmailVerificationToken(
       user._id.toString(),
-      verificationToken,
+      hashedToken,
       expires,
     );
 
@@ -241,10 +244,11 @@ export class AuthService {
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = this.hashToken(resetToken);
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await this.usersService.setPasswordResetToken(
       user._id.toString(),
-      resetToken,
+      hashedToken,
       expires,
     );
 
@@ -257,7 +261,8 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const user = await this.usersService.findByPasswordResetToken(dto.token);
+    const hashedToken = this.hashToken(dto.token);
+    const user = await this.usersService.findByPasswordResetToken(hashedToken);
     if (!user) {
       throw new BadRequestException('Invalid or expired reset token');
     }
@@ -266,13 +271,17 @@ export class AuthService {
       throw new BadRequestException('Password reset token has expired');
     }
 
-    const newPasswordHash = await bcrypt.hash(dto.newPassword, 10);
+    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.usersService.resetPassword(user._id.toString(), newPasswordHash);
 
     return {
       success: true,
       message: 'Password has been reset successfully',
     };
+  }
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   private generateTokens(

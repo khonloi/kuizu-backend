@@ -3,7 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { User, UserDocument } from '../modules/users/schemas/user.schema';
-import { Course, CourseDocument } from '../modules/courses/schemas/course.schema';
+import {
+  Course,
+  CourseDocument,
+} from '../modules/courses/schemas/course.schema';
 import { Quiz, QuizDocument } from '../modules/quizzes/schemas/quiz.schema';
 
 @Injectable()
@@ -12,7 +15,8 @@ export class SeedService implements OnApplicationBootstrap {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Course.name) private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
     @InjectModel(Quiz.name) private readonly quizModel: Model<QuizDocument>,
   ) {}
 
@@ -27,7 +31,7 @@ export class SeedService implements OnApplicationBootstrap {
   async seedDefaults() {
     let demoUser = await this.userModel.findOne({ email: 'demo@kuizu.dev' });
     if (!demoUser) {
-      const passwordHash = await bcrypt.hash('kuizu123', 10);
+      const passwordHash = await bcrypt.hash('kuizu123', 12);
       demoUser = await this.userModel.create({
         email: 'demo@kuizu.dev',
         username: 'duo_master',
@@ -42,19 +46,23 @@ export class SeedService implements OnApplicationBootstrap {
       this.logger.log('Demo user seeded: demo@kuizu.dev (password: kuizu123)');
     }
 
-    const existingCourse = await this.courseModel.findOne({ slug: 'japanese-basics' });
+    const existingCourse = await this.courseModel.findOne({
+      slug: 'japanese-basics',
+    });
     if (!existingCourse) {
       await this.courseModel.create({
         title: 'Japanese Foundations',
         slug: 'japanese-basics',
-        description: 'Master Hiragana, essential greetings, and everyday phrases!',
+        description:
+          'Master Hiragana, essential greetings, and everyday phrases!',
         icon: '🗾',
         isPublished: true,
         units: [
           {
             id: 'unit-1',
             title: 'Unit 1: Essential Greetings',
-            description: 'Learn to introduce yourself and say hello & thank you',
+            description:
+              'Learn to introduce yourself and say hello & thank you',
             color: '#58cc02',
             order: 1,
             lessons: [
@@ -77,7 +85,12 @@ export class SeedService implements OnApplicationBootstrap {
                     id: 'ex-2',
                     type: 'translate',
                     prompt: 'Translate: "Thank you very much"',
-                    options: ['Arigatou gozaimasu', 'Gomen nasai', 'Konnichiwa', 'Hai'],
+                    options: [
+                      'Arigatou gozaimasu',
+                      'Gomen nasai',
+                      'Konnichiwa',
+                      'Hai',
+                    ],
                     answer: 'Arigatou gozaimasu',
                     hint: 'Polite expression of gratitude',
                   },
@@ -90,19 +103,24 @@ export class SeedService implements OnApplicationBootstrap {
       this.logger.log('Sample Japanese Duolingo-style course seeded');
     }
 
-    const existingQuiz = await this.quizModel.findOne({ title: 'Web Tech & Pop Culture Quiz' });
+    const existingQuiz = await this.quizModel.findOne({
+      title: 'Web Tech & Pop Culture Quiz',
+    });
     if (!existingQuiz && demoUser) {
       await this.quizModel.create({
         title: 'Web Tech & Pop Culture Quiz',
-        description: 'Test your knowledge on modern full-stack web dev and tech trivia!',
-        coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&auto=format&fit=crop',
+        description:
+          'Test your knowledge on modern full-stack web dev and tech trivia!',
+        coverImage:
+          'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&auto=format&fit=crop',
         author: demoUser._id,
         isPublic: true,
         playCount: 12,
         questions: [
           {
             id: 'q1',
-            questionText: 'Which runtime was created by Ryan Dahl after Node.js?',
+            questionText:
+              'Which runtime was created by Ryan Dahl after Node.js?',
             type: 'multiple-choice',
             timeLimit: 20,
             points: 1000,
