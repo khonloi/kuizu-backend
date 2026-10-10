@@ -778,4 +778,108 @@ describe('UsersService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('session management', () => {
+    it('should delegate addSession to userRepository', async () => {
+      const session = {
+        sessionId: 's1',
+        tokenHash: 'h1',
+        expiresAt: new Date(Date.now() + 10000),
+        createdAt: new Date(),
+      };
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: vi.fn().mockResolvedValue({ ...mockUser, sessions: [session] }),
+      });
+
+      const res = await service.addSession(mockUser._id.toString(), session);
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalled();
+      expect(res).toBeDefined();
+    });
+
+    it('should delegate removeSession to userRepository', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
+
+      await service.removeSession(mockUser._id.toString(), 's1');
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        mockUser._id.toString(),
+        { $pull: { sessions: { sessionId: 's1' } } },
+        { new: true },
+      );
+    });
+
+    it('should delegate rotateSession to userRepository', async () => {
+      const newSession = {
+        sessionId: 's2',
+        tokenHash: 'h2',
+        expiresAt: new Date(Date.now() + 10000),
+        createdAt: new Date(),
+      };
+      mockUserModel.findByIdAndUpdate
+        .mockReturnValueOnce({
+          exec: vi.fn().mockResolvedValue(mockUser),
+        })
+        .mockReturnValueOnce({
+          exec: vi
+            .fn()
+            .mockResolvedValue({ ...mockUser, sessions: [newSession] }),
+        });
+
+      await service.rotateSession(mockUser._id.toString(), 's1', newSession);
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalled();
+    });
+
+    it('should delegate removeAllSessions to userRepository', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: vi.fn().mockResolvedValue({ ...mockUser, sessions: [] }),
+      });
+
+      await service.removeAllSessions(mockUser._id.toString());
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        mockUser._id.toString(),
+        { $set: { sessions: [] } },
+        { new: true },
+      );
+    });
+
+    it('should delegate removeAllOtherSessions to userRepository', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
+
+      await service.removeAllOtherSessions(mockUser._id.toString(), 's1');
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        mockUser._id.toString(),
+        { $pull: { sessions: { sessionId: { $ne: 's1' } } } },
+        { new: true },
+      );
+    });
+
+    it('should get active non-expired sessions', async () => {
+      const activeSession = {
+        sessionId: 's1',
+        tokenHash: 'h1',
+        expiresAt: new Date(Date.now() + 100000),
+        createdAt: new Date(),
+      };
+      const expiredSession = {
+        sessionId: 's-old',
+        tokenHash: 'h-old',
+        expiresAt: new Date(Date.now() - 100000),
+        createdAt: new Date(),
+      };
+
+      mockUserModel.findById.mockReturnValue({
+        exec: vi.fn().mockResolvedValue({
+          ...mockUser,
+          sessions: [activeSession, expiredSession],
+        }),
+      });
+
+      const sessions = await service.getSessions(mockUser._id.toString());
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].sessionId).toBe('s1');
+    });
+  });
 });

@@ -1,4 +1,14 @@
-import { Controller, Post, Body, Res, Req, Get } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Res,
+  Req,
+  Get,
+  Delete,
+  Param,
+  Query,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -64,9 +74,14 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'User successfully registered' })
   async register(
     @Body(new ZodValidationPipe(registerSchema)) dto: RegisterDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.register(dto);
+    const clientMeta = {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip,
+    };
+    const result = await this.authService.register(dto, clientMeta);
     this.setCookies(res, result.accessToken, result.refreshToken);
     return result;
   }
@@ -78,9 +93,14 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Login successful' })
   async login(
     @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(dto);
+    const clientMeta = {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip,
+    };
+    const result = await this.authService.login(dto, clientMeta);
     this.setCookies(res, result.accessToken, result.refreshToken);
     return result;
   }
@@ -96,17 +116,64 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const token = req.cookies?.refresh_token || bodyToken;
-    const tokens = await this.authService.refreshToken(token);
+    const clientMeta = {
+      userAgent: req.headers['user-agent'],
+      ipAddress: req.ip,
+    };
+    const tokens = await this.authService.refreshToken(token, clientMeta);
     this.setCookies(res, tokens.accessToken, tokens.refreshToken);
     return tokens;
   }
 
+  @ApiBearerAuth()
   @Post('logout')
   @ApiOperation({ summary: 'Log out and clear session cookies' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @CurrentUser('id') userId: string,
+    @Req() req: Request,
+    @Body('refreshToken') bodyToken: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies?.refresh_token || bodyToken;
     res.clearCookie('access_token');
     res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
-    return { success: true, message: 'Logged out successfully' };
+    return this.authService.logout(userId, token);
+  }
+
+  @ApiBearerAuth()
+  @Get('sessions')
+  @ApiOperation({ summary: 'List active sessions for current user' })
+  async getSessions(@CurrentUser('id') userId: string, @Req() req: Request) {
+    const token = req.cookies?.refresh_token;
+    return this.authService.getSessions(userId, token);
+  }
+
+  @ApiBearerAuth()
+  @Delete('sessions/:sessionId')
+  @ApiOperation({ summary: 'Revoke a specific active session' })
+  async revokeSession(
+    @CurrentUser('id') userId: string,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.authService.revokeSession(userId, sessionId);
+  }
+
+  @ApiBearerAuth()
+  @Delete('sessions')
+  @ApiOperation({ summary: 'Revoke all other sessions or all sessions' })
+  async revokeSessions(
+    @CurrentUser('id') userId: string,
+    @Req() req: Request,
+    @Query('all') all?: string,
+  ) {
+    if (all === 'true') {
+      return this.authService.revokeAllSessions(userId);
+    }
+    const token = req.cookies?.refresh_token;
+    if (!token) {
+      return this.authService.revokeAllSessions(userId);
+    }
+    return this.authService.revokeOtherSessions(userId, token);
   }
 
   @ApiBearerAuth()

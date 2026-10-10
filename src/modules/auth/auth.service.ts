@@ -28,7 +28,10 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(
+    dto: RegisterDto,
+    clientMeta?: { userAgent?: string; ipAddress?: string },
+  ) {
     const existingEmail = await this.usersService.findByEmail(dto.email);
     if (existingEmail) {
       throw new ConflictException('Email already in use');
@@ -64,6 +67,17 @@ export class AuthService {
       user.role,
     );
 
+    const tokenHash = this.hashToken(tokens.refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.usersService.addSession(user._id.toString(), {
+      sessionId: tokens.sessionId,
+      tokenHash,
+      userAgent: clientMeta?.userAgent,
+      ipAddress: clientMeta?.ipAddress,
+      expiresAt,
+      createdAt: new Date(),
+    });
+
     return {
       user: {
         id: user._id,
@@ -83,7 +97,10 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
+  async login(
+    dto: LoginDto,
+    clientMeta?: { userAgent?: string; ipAddress?: string },
+  ) {
     const isEmail = dto.emailOrUsername.includes('@');
     const user = isEmail
       ? await this.usersService.findByEmail(dto.emailOrUsername)
@@ -111,6 +128,17 @@ export class AuthService {
       user.role,
     );
 
+    const tokenHash = this.hashToken(tokens.refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.usersService.addSession(user._id.toString(), {
+      sessionId: tokens.sessionId,
+      tokenHash,
+      userAgent: clientMeta?.userAgent,
+      ipAddress: clientMeta?.ipAddress,
+      expiresAt,
+      createdAt: new Date(),
+    });
+
     return {
       user: {
         id: user._id,
@@ -129,7 +157,14 @@ export class AuthService {
     };
   }
 
-  async refreshToken(refreshToken: string) {
+  async refreshToken(
+    refreshToken: string,
+    clientMeta?: { userAgent?: string; ipAddress?: string },
+  ) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
     try {
       const refreshSecret =
         this.configService.get<string>('JWT_REFRESH_SECRET') ||
@@ -138,19 +173,72 @@ export class AuthService {
         secret: refreshSecret,
       });
 
-      const user = await this.usersService.findById(payload.sub);
+      const userId = payload.sub;
+      const sessionId = payload.jti || payload.sid;
+
+      const user = await this.usersService.findById(userId);
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
 
+      if (user.isActive === false) {
+        throw new UnauthorizedException(
+          'Account has been suspended or deactivated',
+        );
+      }
+
+      const incomingTokenHash = this.hashToken(refreshToken);
+      const sessions = user.sessions || [];
+      const existingSession = sessions.find((s) => s.sessionId === sessionId);
+
+      // Replay Detection
+      if (!existingSession) {
+        throw new UnauthorizedException('Invalid or revoked refresh token');
+      }
+
+      if (existingSession.tokenHash !== incomingTokenHash) {
+        // Reuse detected! Immediate revocation of all sessions for security
+        await this.usersService.removeAllSessions(userId);
+        throw new UnauthorizedException(
+          'Refresh token reuse detected. All active sessions have been revoked for your security.',
+        );
+      }
+
+      if (existingSession.expiresAt && existingSession.expiresAt < new Date()) {
+        await this.usersService.removeSession(userId, sessionId);
+        throw new UnauthorizedException('Refresh token has expired');
+      }
+
+      // Rotate session and tokens
+      const newSessionId = crypto.randomUUID();
       const tokens = this.generateTokens(
         user._id.toString(),
         user.email,
         user.username,
         user.role,
+        newSessionId,
       );
-      return tokens;
-    } catch {
+
+      const newTokenHash = this.hashToken(tokens.refreshToken);
+      const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      await this.usersService.rotateSession(userId, sessionId, {
+        sessionId: newSessionId,
+        tokenHash: newTokenHash,
+        userAgent: clientMeta?.userAgent || existingSession.userAgent,
+        ipAddress: clientMeta?.ipAddress || existingSession.ipAddress,
+        expiresAt: newExpiresAt,
+        createdAt: new Date(),
+      });
+
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      };
+    } catch (err: any) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
@@ -171,6 +259,7 @@ export class AuthService {
 
     const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.usersService.updatePassword(userId, newPasswordHash);
+    await this.usersService.removeAllSessions(userId);
 
     return {
       success: true,
@@ -273,11 +362,80 @@ export class AuthService {
 
     const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.usersService.resetPassword(user._id.toString(), newPasswordHash);
+    await this.usersService.removeAllSessions(user._id.toString());
 
     return {
       success: true,
       message: 'Password has been reset successfully',
     };
+  }
+
+  async logout(userId: string, refreshToken?: string) {
+    if (refreshToken) {
+      try {
+        const payload = this.jwtService.decode(refreshToken) as any;
+        const sessionId = payload?.jti || payload?.sid;
+        if (sessionId) {
+          await this.usersService.removeSession(userId, sessionId);
+          return { success: true, message: 'Logged out of current session' };
+        }
+      } catch {
+        // decode failure falls through
+      }
+    }
+    return { success: true, message: 'Logged out successfully' };
+  }
+
+  async getSessions(userId: string, currentRefreshToken?: string) {
+    let currentSessionId: string | null = null;
+    if (currentRefreshToken) {
+      try {
+        const payload = this.jwtService.decode(currentRefreshToken) as any;
+        currentSessionId = payload?.jti || payload?.sid || null;
+      } catch {
+        // ignore invalid token decode
+      }
+    }
+
+    const sessions = await this.usersService.getSessions(userId);
+    return sessions.map((s) => ({
+      sessionId: s.sessionId,
+      userAgent: s.userAgent || 'Unknown Device',
+      ipAddress: s.ipAddress || 'Unknown IP',
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+      isCurrent: currentSessionId ? s.sessionId === currentSessionId : false,
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    await this.usersService.removeSession(userId, sessionId);
+    return { success: true, message: 'Session revoked successfully' };
+  }
+
+  async revokeOtherSessions(userId: string, currentRefreshToken: string) {
+    let currentSessionId: string | null = null;
+    try {
+      const payload = this.jwtService.decode(currentRefreshToken) as any;
+      currentSessionId = payload?.jti || payload?.sid || null;
+    } catch {
+      // ignore
+    }
+
+    if (!currentSessionId) {
+      throw new BadRequestException('Could not identify current session');
+    }
+
+    await this.usersService.removeAllOtherSessions(userId, currentSessionId);
+    return {
+      success: true,
+      message: 'All other sessions revoked successfully',
+    };
+  }
+
+  async revokeAllSessions(userId: string) {
+    await this.usersService.removeAllSessions(userId);
+    return { success: true, message: 'All active sessions revoked' };
   }
 
   private hashToken(token: string): string {
@@ -289,8 +447,11 @@ export class AuthService {
     email: string,
     username: string,
     role: string,
+    sessionId?: string,
   ) {
-    const payload = { sub: userId, email, username, role };
+    const sid = sessionId || crypto.randomUUID();
+    const payload = { sub: userId, email, username, role, sid };
+    const refreshPayload = { sub: userId, email, username, role, jti: sid };
 
     const accessSecret =
       this.configService.get<string>('JWT_ACCESS_SECRET') ||
@@ -304,11 +465,11 @@ export class AuthService {
       expiresIn: '15m',
     });
 
-    const refreshToken = this.jwtService.sign(payload, {
+    const refreshToken = this.jwtService.sign(refreshPayload, {
       secret: refreshSecret,
       expiresIn: '7d',
     });
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, sessionId: sid };
   }
 }

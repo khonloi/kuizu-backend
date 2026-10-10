@@ -56,11 +56,18 @@ describe('AuthService', () => {
       markEmailAsVerified: vi.fn(),
       setPasswordResetToken: vi.fn(),
       resetPassword: vi.fn(),
+      addSession: vi.fn(),
+      removeSession: vi.fn(),
+      rotateSession: vi.fn(),
+      removeAllSessions: vi.fn(),
+      removeAllOtherSessions: vi.fn(),
+      getSessions: vi.fn(),
     };
 
     mockJwtService = {
       sign: vi.fn().mockReturnValue('mock_jwt_token'),
       verify: vi.fn(),
+      decode: vi.fn(),
     };
 
     mockConfigService = {
@@ -202,17 +209,69 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
-    it('should return new tokens for a valid refresh token', async () => {
-      mockJwtService.verify.mockReturnValue({ sub: 'user-123' });
-      mockUsersService.findById.mockResolvedValue(mockUser);
+    it('should return new tokens and rotate session for a valid refresh token', async () => {
+      const validToken = 'valid_refresh_token';
+      const tokenHash = (service as any).hashToken(validToken);
+      const userWithSession = {
+        ...mockUser,
+        sessions: [
+          {
+            sessionId: 'sess-123',
+            tokenHash,
+            expiresAt: new Date(Date.now() + 86400000),
+          },
+        ],
+      };
+      mockJwtService.verify.mockReturnValue({
+        sub: 'user-123',
+        jti: 'sess-123',
+      });
+      mockUsersService.findById.mockResolvedValue(userWithSession);
 
-      const tokens = await service.refreshToken('valid_refresh_token');
+      const tokens = await service.refreshToken(validToken);
       expect(tokens.accessToken).toBe('mock_jwt_token');
       expect(tokens.refreshToken).toBe('mock_jwt_token');
+      expect(mockUsersService.rotateSession).toHaveBeenCalledWith(
+        'user-123',
+        'sess-123',
+        expect.objectContaining({
+          sessionId: expect.any(String),
+          tokenHash: expect.any(String),
+        }),
+      );
+    });
+
+    it('should throw UnauthorizedException and revoke all sessions when token reuse / replay is detected', async () => {
+      const stolenToken = 'stolen_refresh_token';
+      const userWithSession = {
+        ...mockUser,
+        sessions: [
+          {
+            sessionId: 'sess-123',
+            tokenHash: 'different_hash_from_previous_rotation',
+            expiresAt: new Date(Date.now() + 86400000),
+          },
+        ],
+      };
+      mockJwtService.verify.mockReturnValue({
+        sub: 'user-123',
+        jti: 'sess-123',
+      });
+      mockUsersService.findById.mockResolvedValue(userWithSession);
+
+      await expect(service.refreshToken(stolenToken)).rejects.toThrow(
+        /Refresh token reuse detected/,
+      );
+      expect(mockUsersService.removeAllSessions).toHaveBeenCalledWith(
+        'user-123',
+      );
     });
 
     it('should throw UnauthorizedException if user from token payload does not exist', async () => {
-      mockJwtService.verify.mockReturnValue({ sub: 'user-123' });
+      mockJwtService.verify.mockReturnValue({
+        sub: 'user-123',
+        jti: 'sess-123',
+      });
       mockUsersService.findById.mockResolvedValue(null);
 
       await expect(service.refreshToken('valid_refresh_token')).rejects.toThrow(
@@ -228,6 +287,76 @@ describe('AuthService', () => {
       await expect(
         service.refreshToken('invalid_or_expired_token'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('session management', () => {
+    it('logout should remove session if refreshToken is provided', async () => {
+      mockJwtService.decode.mockReturnValue({ jti: 'sess-123' });
+
+      const res = await service.logout('user-123', 'some_token');
+      expect(res.success).toBe(true);
+      expect(mockUsersService.removeSession).toHaveBeenCalledWith(
+        'user-123',
+        'sess-123',
+      );
+    });
+
+    it('getSessions should return sessions with isCurrent flag', async () => {
+      const now = new Date();
+      mockUsersService.getSessions.mockResolvedValue([
+        {
+          sessionId: 'sess-1',
+          userAgent: 'Chrome',
+          ipAddress: '127.0.0.1',
+          createdAt: now,
+          expiresAt: now,
+        },
+        {
+          sessionId: 'sess-2',
+          userAgent: 'Firefox',
+          ipAddress: '127.0.0.2',
+          createdAt: now,
+          expiresAt: now,
+        },
+      ]);
+      mockJwtService.decode.mockReturnValue({ jti: 'sess-1' });
+
+      const sessions = await service.getSessions('user-123', 'current_token');
+      expect(sessions).toHaveLength(2);
+      expect(sessions[0].isCurrent).toBe(true);
+      expect(sessions[1].isCurrent).toBe(false);
+    });
+
+    it('revokeSession should remove targeted session', async () => {
+      const res = await service.revokeSession('user-123', 'sess-target');
+      expect(res.success).toBe(true);
+      expect(mockUsersService.removeSession).toHaveBeenCalledWith(
+        'user-123',
+        'sess-target',
+      );
+    });
+
+    it('revokeOtherSessions should remove all other sessions', async () => {
+      mockJwtService.decode.mockReturnValue({ jti: 'sess-current' });
+
+      const res = await service.revokeOtherSessions(
+        'user-123',
+        'current_token',
+      );
+      expect(res.success).toBe(true);
+      expect(mockUsersService.removeAllOtherSessions).toHaveBeenCalledWith(
+        'user-123',
+        'sess-current',
+      );
+    });
+
+    it('revokeAllSessions should clear all sessions for user', async () => {
+      const res = await service.revokeAllSessions('user-123');
+      expect(res.success).toBe(true);
+      expect(mockUsersService.removeAllSessions).toHaveBeenCalledWith(
+        'user-123',
+      );
     });
   });
 

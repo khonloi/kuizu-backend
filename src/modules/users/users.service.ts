@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { User, UserDocument } from './schemas/user.schema';
+import { User, UserDocument, SessionInfo } from './schemas/user.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
@@ -239,5 +239,39 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  // --- Session Management ---
+  async addSession(userId: string, session: SessionInfo) {
+    return this.userRepository.addSession(userId, session);
+  }
+
+  async removeSession(userId: string, sessionId: string) {
+    return this.userRepository.removeSession(userId, sessionId);
+  }
+
+  async rotateSession(
+    userId: string,
+    oldSessionId: string,
+    newSession: SessionInfo,
+  ) {
+    return this.userRepository.rotateSession(userId, oldSessionId, newSession);
+  }
+
+  async removeAllSessions(userId: string) {
+    return this.userRepository.clearAllSessions(userId);
+  }
+
+  async removeAllOtherSessions(userId: string, currentSessionId: string) {
+    return this.userRepository.clearAllOtherSessions(userId, currentSessionId);
+  }
+
+  async getSessions(userId: string) {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const now = new Date();
+    return (user.sessions || []).filter((s) => s.expiresAt > now);
   }
 }

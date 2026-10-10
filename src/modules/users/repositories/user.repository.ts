@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseRepository } from '../../../common/database';
-import { User, UserDocument } from '../schemas/user.schema';
+import { User, UserDocument, SessionInfo } from '../schemas/user.schema';
 import { UpdateProfileDto } from '../dto/user.dto';
 
 @Injectable()
@@ -231,5 +231,82 @@ export class UserRepository extends BaseRepository<UserDocument> {
       .findByIdAndUpdate(id, { $set: { isActive } }, { new: true })
       .select('-passwordHash');
     return this.executeQuery(query);
+  }
+
+  async addSession(
+    userId: string,
+    session: SessionInfo,
+  ): Promise<UserDocument | null> {
+    return this.findByIdAndUpdate(
+      userId,
+      {
+        $push: {
+          sessions: {
+            $each: [session],
+            $slice: -10,
+          },
+        },
+      },
+      { new: true },
+    );
+  }
+
+  async removeSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<UserDocument | null> {
+    return this.findByIdAndUpdate(
+      userId,
+      {
+        $pull: {
+          sessions: { sessionId },
+        },
+      },
+      { new: true },
+    );
+  }
+
+  async rotateSession(
+    userId: string,
+    oldSessionId: string,
+    newSession: SessionInfo,
+  ): Promise<UserDocument | null> {
+    const updated = await this.findByIdAndUpdate(
+      userId,
+      {
+        $pull: {
+          sessions: { sessionId: oldSessionId },
+        },
+      },
+      { new: true },
+    );
+
+    if (!updated) return null;
+    return this.addSession(userId, newSession);
+  }
+
+  async clearAllSessions(userId: string): Promise<UserDocument | null> {
+    return this.findByIdAndUpdate(
+      userId,
+      {
+        $set: { sessions: [] },
+      },
+      { new: true },
+    );
+  }
+
+  async clearAllOtherSessions(
+    userId: string,
+    currentSessionId: string,
+  ): Promise<UserDocument | null> {
+    return this.findByIdAndUpdate(
+      userId,
+      {
+        $pull: {
+          sessions: { sessionId: { $ne: currentSessionId } },
+        },
+      },
+      { new: true },
+    );
   }
 }

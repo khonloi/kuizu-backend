@@ -12,6 +12,11 @@ describe('AuthController', () => {
       register: vi.fn(),
       login: vi.fn(),
       refreshToken: vi.fn(),
+      logout: vi.fn(),
+      getSessions: vi.fn(),
+      revokeSession: vi.fn(),
+      revokeOtherSessions: vi.fn(),
+      revokeAllSessions: vi.fn(),
       changePassword: vi.fn(),
       verifyEmail: vi.fn(),
       resendVerification: vi.fn(),
@@ -44,8 +49,9 @@ describe('AuthController', () => {
         refreshToken: 'refresh_jwt',
       };
       mockAuthService.register.mockResolvedValue(authResult);
+      const req: any = { headers: { 'user-agent': 'Jest' }, ip: '127.0.0.1' };
 
-      const result = await controller.register(registerDto, mockResponse);
+      const result = await controller.register(registerDto, req, mockResponse);
 
       expect(result).toBe(authResult);
       expect(mockResponse.cookie).toHaveBeenCalledWith(
@@ -70,8 +76,9 @@ describe('AuthController', () => {
         refreshToken: 'refresh_jwt',
       };
       mockAuthService.login.mockResolvedValue(authResult);
+      const req: any = { headers: { 'user-agent': 'Jest' }, ip: '127.0.0.1' };
 
-      const result = await controller.login(loginDto, mockResponse);
+      const result = await controller.login(loginDto, req, mockResponse);
 
       expect(result).toBe(authResult);
       expect(mockResponse.cookie).toHaveBeenCalledWith(
@@ -89,7 +96,11 @@ describe('AuthController', () => {
 
   describe('refresh', () => {
     it('should refresh tokens from request cookie', async () => {
-      const req: any = { cookies: { refresh_token: 'cookie_refresh_jwt' } };
+      const req: any = {
+        cookies: { refresh_token: 'cookie_refresh_jwt' },
+        headers: {},
+        ip: '127.0.0.1',
+      };
       const tokens = { accessToken: 'new_access', refreshToken: 'new_refresh' };
       mockAuthService.refreshToken.mockResolvedValue(tokens);
 
@@ -98,6 +109,7 @@ describe('AuthController', () => {
       expect(result).toBe(tokens);
       expect(mockAuthService.refreshToken).toHaveBeenCalledWith(
         'cookie_refresh_jwt',
+        expect.any(Object),
       );
       expect(mockResponse.cookie).toHaveBeenCalledWith(
         'access_token',
@@ -107,7 +119,7 @@ describe('AuthController', () => {
     });
 
     it('should refresh tokens from request body if cookie is missing', async () => {
-      const req: any = { cookies: {} };
+      const req: any = { cookies: {}, headers: {}, ip: '127.0.0.1' };
       const tokens = { accessToken: 'new_access', refreshToken: 'new_refresh' };
       mockAuthService.refreshToken.mockResolvedValue(tokens);
 
@@ -120,22 +132,77 @@ describe('AuthController', () => {
       expect(result).toBe(tokens);
       expect(mockAuthService.refreshToken).toHaveBeenCalledWith(
         'body_refresh_jwt',
+        expect.any(Object),
       );
     });
   });
 
   describe('logout', () => {
-    it('should clear cookies and return logout message', async () => {
-      const result = await controller.logout(mockResponse);
+    it('should clear cookies and delegate to authService.logout', async () => {
+      const req: any = { cookies: { refresh_token: 'cookie_refresh_jwt' } };
+      mockAuthService.logout.mockResolvedValue({
+        success: true,
+        message: 'Logged out successfully',
+      });
+
+      const result = await controller.logout('u1', req, '', mockResponse);
 
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token', {
         path: '/api/auth/refresh',
       });
+      expect(mockAuthService.logout).toHaveBeenCalledWith(
+        'u1',
+        'cookie_refresh_jwt',
+      );
       expect(result).toEqual({
         success: true,
         message: 'Logged out successfully',
       });
+    });
+  });
+
+  describe('session endpoints', () => {
+    it('getSessions should delegate to authService.getSessions', async () => {
+      const req: any = { cookies: { refresh_token: 'current_token' } };
+      const sessions = [{ sessionId: 's1', isCurrent: true }];
+      mockAuthService.getSessions.mockResolvedValue(sessions);
+
+      const res = await controller.getSessions('u1', req);
+      expect(res).toBe(sessions);
+      expect(mockAuthService.getSessions).toHaveBeenCalledWith(
+        'u1',
+        'current_token',
+      );
+    });
+
+    it('revokeSession should delegate to authService.revokeSession', async () => {
+      mockAuthService.revokeSession.mockResolvedValue({ success: true });
+
+      const res = await controller.revokeSession('u1', 's2');
+      expect(res).toEqual({ success: true });
+      expect(mockAuthService.revokeSession).toHaveBeenCalledWith('u1', 's2');
+    });
+
+    it('revokeSessions should revoke all if query is all=true', async () => {
+      const req: any = { cookies: {} };
+      mockAuthService.revokeAllSessions.mockResolvedValue({ success: true });
+
+      const res = await controller.revokeSessions('u1', req, 'true');
+      expect(res).toEqual({ success: true });
+      expect(mockAuthService.revokeAllSessions).toHaveBeenCalledWith('u1');
+    });
+
+    it('revokeSessions should revoke other sessions when token is present', async () => {
+      const req: any = { cookies: { refresh_token: 'active_token' } };
+      mockAuthService.revokeOtherSessions.mockResolvedValue({ success: true });
+
+      const res = await controller.revokeSessions('u1', req);
+      expect(res).toEqual({ success: true });
+      expect(mockAuthService.revokeOtherSessions).toHaveBeenCalledWith(
+        'u1',
+        'active_token',
+      );
     });
   });
 

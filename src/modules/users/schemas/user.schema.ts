@@ -14,6 +14,29 @@ export class StreakInfo {
 
 export const StreakInfoSchema = SchemaFactory.createForClass(StreakInfo);
 
+@Schema({ _id: false })
+export class SessionInfo {
+  @Prop({ required: true })
+  sessionId: string;
+
+  @Prop({ required: true })
+  tokenHash: string;
+
+  @Prop({ default: '' })
+  userAgent?: string;
+
+  @Prop({ default: '' })
+  ipAddress?: string;
+
+  @Prop({ required: true })
+  expiresAt: Date;
+
+  @Prop({ default: () => new Date() })
+  createdAt: Date;
+}
+
+export const SessionInfoSchema = SchemaFactory.createForClass(SessionInfo);
+
 @Schema({ timestamps: true })
 export class User {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
@@ -72,9 +95,14 @@ export class User {
 
   @Prop({ type: Date, default: null })
   passwordResetExpires?: Date | null;
+
+  @Prop({ type: [SessionInfoSchema], default: () => [] })
+  sessions: SessionInfo[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ xp: -1 });
 UserSchema.index({ emailVerificationToken: 1 }, { sparse: true });
 UserSchema.index({ passwordResetToken: 1 }, { sparse: true });
+UserSchema.index({ 'sessions.sessionId': 1 });
+UserSchema.index({ 'sessions.tokenHash': 1 });
