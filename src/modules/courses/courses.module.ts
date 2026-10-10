@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Course, CourseSchema } from './schemas/course.schema';
-import { UserProgress, UserProgressSchema } from './schemas/user-progress.schema';
+import {
+  UserProgress,
+  UserProgressSchema,
+} from './schemas/user-progress.schema';
 import { CoursesService } from './courses.service';
 import { CoursesController } from './courses.controller';
-import { UsersModule } from '../users/users.module';
+import { GamificationModule } from '../gamification/gamification.module';
+import { CourseRepository, UserProgressRepository } from './repositories';
 
 @Module({
   imports: [
@@ -12,10 +16,10 @@ import { UsersModule } from '../users/users.module';
       { name: Course.name, schema: CourseSchema },
       { name: UserProgress.name, schema: UserProgressSchema },
     ]),
-    UsersModule,
+    GamificationModule,
   ],
   controllers: [CoursesController],
-  providers: [CoursesService],
-  exports: [CoursesService],
+  providers: [CoursesService, CourseRepository, UserProgressRepository],
+  exports: [CoursesService, CourseRepository, UserProgressRepository],
 })
 export class CoursesModule {}

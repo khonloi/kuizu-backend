@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { UsersService } from './users.service';
+import { UserRepository } from './repositories';
+import { GamificationService } from '../gamification/gamification.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -46,7 +48,9 @@ describe('UsersService', () => {
     mockUserModel.find = vi.fn();
     mockUserModel.countDocuments = vi.fn();
 
-    service = new UsersService(mockUserModel);
+    const userRepository = new UserRepository(mockUserModel);
+    const gamificationService = new GamificationService(userRepository);
+    service = new UsersService(userRepository, gamificationService);
   });
 
   describe('create', () => {
@@ -249,13 +253,11 @@ describe('UsersService', () => {
     it('should set email verification token and expiration', async () => {
       const expires = new Date();
       mockUserModel.findByIdAndUpdate.mockReturnValue({
-        exec: vi
-          .fn()
-          .mockResolvedValue({
-            ...mockUser,
-            emailVerificationToken: 'token',
-            emailVerificationExpires: expires,
-          }),
+        exec: vi.fn().mockResolvedValue({
+          ...mockUser,
+          emailVerificationToken: 'token',
+          emailVerificationExpires: expires,
+        }),
       });
 
       const result = await service.setEmailVerificationToken(
@@ -308,13 +310,11 @@ describe('UsersService', () => {
     it('should set password reset token and expiration', async () => {
       const expires = new Date();
       mockUserModel.findByIdAndUpdate.mockReturnValue({
-        exec: vi
-          .fn()
-          .mockResolvedValue({
-            ...mockUser,
-            passwordResetToken: 'reset-tok',
-            passwordResetExpires: expires,
-          }),
+        exec: vi.fn().mockResolvedValue({
+          ...mockUser,
+          passwordResetToken: 'reset-tok',
+          passwordResetExpires: expires,
+        }),
       });
 
       const result = await service.setPasswordResetToken(

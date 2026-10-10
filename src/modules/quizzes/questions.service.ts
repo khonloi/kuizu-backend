@@ -3,27 +3,23 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Question, QuestionDocument } from './schemas/question.schema';
+import { Types } from 'mongoose';
+import { QuestionDocument } from './schemas/question.schema';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
+import { QuestionRepository } from './repositories';
 
 @Injectable()
 export class QuestionsService {
-  constructor(
-    @InjectModel(Question.name)
-    private readonly questionModel: Model<QuestionDocument>,
-  ) {}
+  constructor(private readonly questionRepository: QuestionRepository) {}
 
   async create(
     authorId: string,
     dto: CreateQuestionDto,
   ): Promise<QuestionDocument> {
-    const question = new this.questionModel({
+    return this.questionRepository.create({
       ...dto,
       author: new Types.ObjectId(authorId),
     });
-    return question.save();
   }
 
   async findAll(filterOptions?: {
@@ -52,21 +48,14 @@ export class QuestionsService {
       filter.questionText = { $regex: filterOptions.search, $options: 'i' };
     }
 
-    return this.questionModel
-      .find(filter)
-      .populate('author', 'username avatarUrl')
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.questionRepository.findWithDetails(filter);
   }
 
   async findOne(id: string): Promise<QuestionDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Invalid question ID');
     }
-    const question = await this.questionModel
-      .findById(id)
-      .populate('author', 'username avatarUrl')
-      .exec();
+    const question = await this.questionRepository.findByIdWithDetails(id);
 
     if (!question) {
       throw new NotFoundException('Question not found');
@@ -111,7 +100,7 @@ export class QuestionsService {
       throw new ForbiddenException('Not authorized to delete this question');
     }
 
-    await this.questionModel.findByIdAndDelete(id).exec();
+    await this.questionRepository.findByIdAndDelete(id);
     return { success: true };
   }
 }

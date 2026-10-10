@@ -10,8 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Types } from 'mongoose';
 import {
   GameStateStore,
   PlayerState,
@@ -19,10 +18,7 @@ import {
 } from './game-state.store';
 import { QuizzesService } from '../quizzes/quizzes.service';
 import { QuizChoice } from '../quizzes/schemas/quiz.schema';
-import {
-  GameSession,
-  GameSessionDocument,
-} from './schemas/game-session.schema';
+import { GameSessionRepository } from './repositories';
 
 @WebSocketGateway({
   cors: {
@@ -40,8 +36,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly gameStateStore: GameStateStore,
     private readonly quizzesService: QuizzesService,
     private readonly jwtService: JwtService,
-    @InjectModel(GameSession.name)
-    private readonly gameSessionModel: Model<GameSessionDocument>,
+    private readonly gameSessionRepository: GameSessionRepository,
   ) {}
 
   handleConnection(client: Socket) {
@@ -277,7 +272,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
           : null;
 
       if (Types.ObjectId.isValid(session.quizId)) {
-        await this.gameSessionModel.create({
+        await this.gameSessionRepository.create({
           pin: session.pin,
           host: hostObjectId,
           quiz: new Types.ObjectId(session.quizId),

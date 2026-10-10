@@ -6,33 +6,37 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { QuizzesService } from './quizzes.service';
+import { QuizRepository, QuestionRepository } from './repositories';
 
 describe('QuizzesService', () => {
   let service: QuizzesService;
-  let mockQuizModel: any;
-  let mockQuestionModel: any;
+  let mockQuizRepository: any;
+  let mockQuestionRepository: any;
 
   beforeEach(() => {
-    mockQuizModel = vi.fn().mockImplementation(function (this: any, dto: any) {
-      Object.assign(this, dto);
-      this._id = new Types.ObjectId();
-      this.save = vi.fn().mockResolvedValue(this);
-    });
-    mockQuizModel.find = vi.fn();
-    mockQuizModel.findById = vi.fn();
-    mockQuizModel.findByIdAndUpdate = vi.fn();
-    mockQuizModel.findByIdAndDelete = vi.fn();
+    mockQuizRepository = {
+      create: vi.fn().mockImplementation((dto) => ({
+        _id: new Types.ObjectId(),
+        save: vi.fn().mockResolvedValue(true),
+        ...dto,
+      })),
+      findWithDetails: vi.fn(),
+      findByIdWithDetails: vi.fn(),
+      findByIdAndDelete: vi.fn(),
+      incrementPlayCount: vi.fn(),
+    };
 
-    mockQuestionModel = vi.fn().mockImplementation(function (
-      this: any,
-      dto: any,
-    ) {
-      Object.assign(this, dto);
-      this._id = new Types.ObjectId();
-      this.save = vi.fn().mockResolvedValue(this);
-    });
+    mockQuestionRepository = {
+      create: vi.fn().mockImplementation((dto) => ({
+        _id: new Types.ObjectId(),
+        ...dto,
+      })),
+    };
 
-    service = new QuizzesService(mockQuizModel, mockQuestionModel);
+    service = new QuizzesService(
+      mockQuizRepository as unknown as QuizRepository,
+      mockQuestionRepository as unknown as QuestionRepository,
+    );
   });
 
   describe('create', () => {
@@ -56,13 +60,9 @@ describe('QuizzesService', () => {
         questions: [{ _id: questionId, questionText: 'Q1' }],
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockPopulatedQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(
+        mockPopulatedQuiz,
+      );
 
       const res = await service.create(authorId, {
         title: 'Quiz 1',
@@ -70,6 +70,7 @@ describe('QuizzesService', () => {
       });
 
       expect(res).toEqual(mockPopulatedQuiz);
+      expect(mockQuizRepository.create).toHaveBeenCalled();
     });
 
     it('should create inline questions if provided in questions array', async () => {
@@ -80,13 +81,9 @@ describe('QuizzesService', () => {
         questions: [{ questionText: 'Inline Q' }],
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockPopulatedQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(
+        mockPopulatedQuiz,
+      );
 
       const res = await service.create(authorId, {
         title: 'Quiz with inline',
@@ -99,64 +96,44 @@ describe('QuizzesService', () => {
       });
 
       expect(res).toEqual(mockPopulatedQuiz);
-      expect(mockQuestionModel).toHaveBeenCalled();
+      expect(mockQuestionRepository.create).toHaveBeenCalled();
     });
   });
 
   describe('findAll & findAllAdmin', () => {
     it('should filter public quizzes for findAll(false)', async () => {
-      const queryMock = {
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            sort: vi.fn().mockReturnValue({
-              exec: vi.fn().mockResolvedValue([{ title: 'Public Quiz' }]),
-            }),
-          }),
-        }),
-      };
-      mockQuizModel.find.mockReturnValue(queryMock);
+      mockQuizRepository.findWithDetails.mockResolvedValue([
+        { title: 'Public Quiz' },
+      ]);
 
       const res = await service.findAll(false);
-      expect(mockQuizModel.find).toHaveBeenCalledWith({ isPublic: true });
+      expect(mockQuizRepository.findWithDetails).toHaveBeenCalledWith({
+        isPublic: true,
+      });
       expect(res).toEqual([{ title: 'Public Quiz' }]);
     });
 
     it('should filter by author when authorId is provided', async () => {
       const authorId = new Types.ObjectId().toString();
-      const queryMock = {
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            sort: vi.fn().mockReturnValue({
-              exec: vi.fn().mockResolvedValue([{ title: 'My Quiz' }]),
-            }),
-          }),
-        }),
-      };
-      mockQuizModel.find.mockReturnValue(queryMock);
+      mockQuizRepository.findWithDetails.mockResolvedValue([
+        { title: 'My Quiz' },
+      ]);
 
       const res = await service.findAll(true, authorId);
-      expect(mockQuizModel.find).toHaveBeenCalledWith({
+      expect(mockQuizRepository.findWithDetails).toHaveBeenCalledWith({
         author: new Types.ObjectId(authorId),
       });
       expect(res).toEqual([{ title: 'My Quiz' }]);
     });
 
     it('should return all quizzes for findAllAdmin', async () => {
-      const queryMock = {
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            sort: vi.fn().mockReturnValue({
-              exec: vi
-                .fn()
-                .mockResolvedValue([{ title: 'Public' }, { title: 'Private' }]),
-            }),
-          }),
-        }),
-      };
-      mockQuizModel.find.mockReturnValue(queryMock);
+      mockQuizRepository.findWithDetails.mockResolvedValue([
+        { title: 'Public' },
+        { title: 'Private' },
+      ]);
 
       const res = await service.findAllAdmin();
-      expect(mockQuizModel.find).toHaveBeenCalledWith();
+      expect(mockQuizRepository.findWithDetails).toHaveBeenCalledWith({});
       expect(res.length).toBe(2);
     });
   });
@@ -170,13 +147,7 @@ describe('QuizzesService', () => {
 
     it('should throw NotFoundException if quiz is not found', async () => {
       const validId = new Types.ObjectId().toString();
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(null),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(null);
 
       await expect(service.findOne(validId)).rejects.toThrow(NotFoundException);
     });
@@ -184,13 +155,7 @@ describe('QuizzesService', () => {
     it('should return quiz if found', async () => {
       const validId = new Types.ObjectId().toString();
       const mockQuiz = { _id: validId, title: 'Found Quiz' };
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
 
       const res = await service.findOne(validId);
       expect(res).toEqual(mockQuiz);
@@ -208,13 +173,7 @@ describe('QuizzesService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
 
       await expect(
         service.update(id, otherUser, { title: 'Updated' }, false),
@@ -232,13 +191,7 @@ describe('QuizzesService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
 
       const res = await service.update(
         id,
@@ -263,13 +216,7 @@ describe('QuizzesService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockQuiz),
-          }),
-        }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
 
       await expect(service.delete(id, otherUser, false)).rejects.toThrow(
         ForbiddenException,
@@ -285,30 +232,20 @@ describe('QuizzesService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuizModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnValue({
-          populate: vi.fn().mockReturnValue({
-            exec: vi.fn().mockResolvedValue(mockQuiz),
-          }),
-        }),
-      });
-      mockQuizModel.findByIdAndDelete.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ _id: id }),
-      });
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
+      mockQuizRepository.findByIdAndDelete.mockResolvedValue({ _id: id });
 
       const res = await service.delete(id, authorId, false);
       expect(res).toEqual({ success: true });
-      expect(mockQuizModel.findByIdAndDelete).toHaveBeenCalledWith(id);
+      expect(mockQuizRepository.findByIdAndDelete).toHaveBeenCalledWith(id);
     });
   });
 
   describe('incrementPlayCount', () => {
-    it('should call findByIdAndUpdate with increment', async () => {
+    it('should call incrementPlayCount on repository', async () => {
       const id = new Types.ObjectId().toString();
       await service.incrementPlayCount(id);
-      expect(mockQuizModel.findByIdAndUpdate).toHaveBeenCalledWith(id, {
-        $inc: { playCount: 1 },
-      });
+      expect(mockQuizRepository.incrementPlayCount).toHaveBeenCalledWith(id);
     });
   });
 });

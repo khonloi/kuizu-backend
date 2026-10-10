@@ -6,71 +6,64 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CoursesService } from './courses.service';
+import { CourseRepository, UserProgressRepository } from './repositories';
+import { GamificationService } from '../gamification/gamification.service';
 
 describe('CoursesService', () => {
   let service: CoursesService;
-  let mockCourseModel: any;
-  let mockProgressModel: any;
-  let mockUsersService: any;
+  let mockCourseRepository: any;
+  let mockProgressRepository: any;
+  let mockGamificationService: any;
 
   beforeEach(() => {
-    mockCourseModel = vi.fn().mockImplementation(function (
-      this: any,
-      dto: any,
-    ) {
-      Object.assign(this, dto);
-      this.save = vi
-        .fn()
-        .mockResolvedValue({ _id: new Types.ObjectId(), ...dto });
-    });
-    mockCourseModel.find = vi.fn();
-    mockCourseModel.findOne = vi.fn();
-    mockCourseModel.findById = vi.fn();
-    mockCourseModel.findByIdAndDelete = vi.fn();
+    mockCourseRepository = {
+      findPublished: vi.fn(),
+      findAllCourses: vi.fn(),
+      findBySlug: vi.fn(),
+      findById: vi.fn(),
+      createCourse: vi.fn().mockImplementation((dto) => ({
+        _id: new Types.ObjectId(),
+        ...dto,
+      })),
+      deleteCourse: vi.fn(),
+    };
 
-    mockProgressModel = vi.fn().mockImplementation(function (
-      this: any,
-      dto: any,
-    ) {
-      Object.assign(this, dto);
-      this.save = vi
-        .fn()
-        .mockResolvedValue({ _id: new Types.ObjectId(), ...dto });
-    });
-    mockProgressModel.findOne = vi.fn();
-    mockProgressModel.create = vi.fn();
+    mockProgressRepository = {
+      findByUserAndCourse: vi.fn(),
+      createProgress: vi.fn().mockImplementation((dto) => ({
+        _id: new Types.ObjectId(),
+        save: vi.fn().mockResolvedValue(true),
+        ...dto,
+      })),
+    };
 
-    mockUsersService = {
+    mockGamificationService = {
       addXp: vi.fn().mockResolvedValue(true),
     };
 
     service = new CoursesService(
-      mockCourseModel,
-      mockProgressModel,
-      mockUsersService,
+      mockCourseRepository as unknown as CourseRepository,
+      mockProgressRepository as unknown as UserProgressRepository,
+      mockGamificationService as unknown as GamificationService,
     );
   });
 
   describe('findAll & findAllAdmin', () => {
     it('should return published courses for findAll', async () => {
       const mockResult = [{ title: 'Japanese 1', isPublished: true }];
-      mockCourseModel.find.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(mockResult),
-      });
+      mockCourseRepository.findPublished.mockResolvedValue(mockResult);
 
       const res = await service.findAll();
-      expect(mockCourseModel.find).toHaveBeenCalledWith({ isPublished: true });
+      expect(mockCourseRepository.findPublished).toHaveBeenCalled();
       expect(res).toEqual(mockResult);
     });
 
     it('should return all courses for findAllAdmin', async () => {
       const mockResult = [{ title: 'Course 1' }, { title: 'Draft Course' }];
-      mockCourseModel.find.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(mockResult),
-      });
+      mockCourseRepository.findAllCourses.mockResolvedValue(mockResult);
 
       const res = await service.findAllAdmin();
-      expect(mockCourseModel.find).toHaveBeenCalledWith();
+      expect(mockCourseRepository.findAllCourses).toHaveBeenCalled();
       expect(res).toEqual(mockResult);
     });
   });
@@ -78,18 +71,14 @@ describe('CoursesService', () => {
   describe('findBySlug', () => {
     it('should return course if found', async () => {
       const course = { slug: 'japanese-basics', title: 'Japanese' };
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(course),
-      });
+      mockCourseRepository.findBySlug.mockResolvedValue(course);
 
       const res = await service.findBySlug('japanese-basics');
       expect(res).toEqual(course);
     });
 
     it('should throw NotFoundException if not found', async () => {
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(null),
-      });
+      mockCourseRepository.findBySlug.mockResolvedValue(null);
 
       await expect(service.findBySlug('nonexistent')).rejects.toThrow(
         NotFoundException,
@@ -106,9 +95,7 @@ describe('CoursesService', () => {
 
     it('should throw NotFoundException if course not found', async () => {
       const validId = new Types.ObjectId().toString();
-      mockCourseModel.findById.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(null),
-      });
+      mockCourseRepository.findById.mockResolvedValue(null);
 
       await expect(service.findById(validId)).rejects.toThrow(
         NotFoundException,
@@ -118,9 +105,7 @@ describe('CoursesService', () => {
     it('should return course if found', async () => {
       const validId = new Types.ObjectId().toString();
       const course = { _id: validId, title: 'Spanish' };
-      mockCourseModel.findById.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(course),
-      });
+      mockCourseRepository.findById.mockResolvedValue(course);
 
       const res = await service.findById(validId);
       expect(res).toEqual(course);
@@ -129,8 +114,8 @@ describe('CoursesService', () => {
 
   describe('create', () => {
     it('should throw ConflictException if slug already exists', async () => {
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ slug: 'existing-course' }),
+      mockCourseRepository.findBySlug.mockResolvedValue({
+        slug: 'existing-course',
       });
 
       await expect(
@@ -143,9 +128,7 @@ describe('CoursesService', () => {
     });
 
     it('should create and return course if slug is unique', async () => {
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(null),
-      });
+      mockCourseRepository.findBySlug.mockResolvedValue(null);
 
       const dto = { title: 'New Course', slug: 'unique-slug', units: [] };
       const res = await service.create(dto);
@@ -159,16 +142,10 @@ describe('CoursesService', () => {
       const id = new Types.ObjectId().toString();
       const existingCourse = { _id: id, slug: 'orig-slug', save: vi.fn() };
 
-      mockCourseModel.findById.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(existingCourse),
-      });
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi
-          .fn()
-          .mockResolvedValue({
-            _id: new Types.ObjectId(),
-            slug: 'conflict-slug',
-          }),
+      mockCourseRepository.findById.mockResolvedValue(existingCourse);
+      mockCourseRepository.findBySlug.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        slug: 'conflict-slug',
       });
 
       await expect(
@@ -187,9 +164,7 @@ describe('CoursesService', () => {
           .mockResolvedValue({ _id: id, title: 'New Title', slug: 'slug' }),
       };
 
-      mockCourseModel.findById.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(existingCourse),
-      });
+      mockCourseRepository.findById.mockResolvedValue(existingCourse);
 
       await service.update(id, { title: 'New Title' });
       expect(existingCourse.title).toBe('New Title');
@@ -200,19 +175,15 @@ describe('CoursesService', () => {
   describe('delete', () => {
     it('should delete course and return confirmation', async () => {
       const id = new Types.ObjectId().toString();
-      mockCourseModel.findById.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ _id: id }),
-      });
-      mockCourseModel.findByIdAndDelete.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ _id: id }),
-      });
+      mockCourseRepository.findById.mockResolvedValue({ _id: id });
+      mockCourseRepository.deleteCourse.mockResolvedValue({ _id: id });
 
       const res = await service.delete(id);
       expect(res).toEqual({
         success: true,
         message: 'Course deleted successfully',
       });
-      expect(mockCourseModel.findByIdAndDelete).toHaveBeenCalledWith(id);
+      expect(mockCourseRepository.deleteCourse).toHaveBeenCalledWith(id);
     });
   });
 
@@ -269,10 +240,10 @@ describe('CoursesService', () => {
         currentUnit: 1,
       };
 
-      mockCourseModel.findOne.mockReturnValue({
-        exec: vi.fn().mockResolvedValue(mockCourse),
-      });
-      mockProgressModel.findOne.mockResolvedValue(mockProgress);
+      mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
+      mockProgressRepository.findByUserAndCourse.mockResolvedValue(
+        mockProgress,
+      );
 
       const res = await service.getEnrichedCurriculum(userId, 'korean-1');
 

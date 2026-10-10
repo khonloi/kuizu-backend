@@ -13,6 +13,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { GamificationModule } from './modules/gamification/gamification.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { QuizzesModule } from './modules/quizzes/quizzes.module';
 import { GamesModule } from './modules/games/games.module';
@@ -83,6 +84,7 @@ import { DatabaseModule } from './database/database.module';
     HealthModule,
     AuthModule,
     UsersModule,
+    GamificationModule,
     CoursesModule,
     QuizzesModule,
     GamesModule,

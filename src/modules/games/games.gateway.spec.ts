@@ -9,7 +9,7 @@ describe('GamesGateway', () => {
   let mockGameStateStore: GameStateStore;
   let mockQuizzesService: QuizzesService;
   let mockJwtService: any;
-  let mockGameSessionModel: any;
+  let mockGameSessionRepository: any;
   let mockServer: any;
 
   beforeEach(() => {
@@ -23,7 +23,7 @@ describe('GamesGateway', () => {
       verify: vi.fn().mockReturnValue({ id: 'user-1', username: 'TeacherBob' }),
     };
 
-    mockGameSessionModel = {
+    mockGameSessionRepository = {
       create: vi.fn().mockResolvedValue({}),
     };
 
@@ -37,7 +37,7 @@ describe('GamesGateway', () => {
       mockGameStateStore,
       mockQuizzesService,
       mockJwtService,
-      mockGameSessionModel,
+      mockGameSessionRepository,
     );
     gateway.server = mockServer;
   });
@@ -172,7 +172,7 @@ describe('GamesGateway', () => {
       const nextRes = await gateway.handleHostNext(hostClient);
       expect(nextRes.success).toBe(true);
       expect(session.state).toBe('ended');
-      expect(mockGameSessionModel.create).toHaveBeenCalled();
+      expect(mockGameSessionRepository.create).toHaveBeenCalled();
     });
   });
 });

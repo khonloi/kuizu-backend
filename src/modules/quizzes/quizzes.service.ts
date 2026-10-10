@@ -4,19 +4,18 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Quiz, QuizDocument } from './schemas/quiz.schema';
-import { Question, QuestionDocument } from './schemas/question.schema';
+import { Types } from 'mongoose';
+import { QuizDocument } from './schemas/quiz.schema';
+import { Question } from './schemas/question.schema';
 import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto } from './dto/question.dto';
+import { QuizRepository, QuestionRepository } from './repositories';
 
 @Injectable()
 export class QuizzesService {
   constructor(
-    @InjectModel(Quiz.name) private readonly quizModel: Model<QuizDocument>,
-    @InjectModel(Question.name)
-    private readonly questionModel: Model<QuestionDocument>,
+    private readonly quizRepository: QuizRepository,
+    private readonly questionRepository: QuestionRepository,
   ) {}
 
   private async resolveQuestionIds(
@@ -43,11 +42,10 @@ export class QuizzesService {
           }
           resolvedIds.push(new Types.ObjectId(item));
         } else if (item && typeof item === 'object') {
-          const newQuestion = new this.questionModel({
+          const savedQuestion = await this.questionRepository.create({
             ...item,
             author: new Types.ObjectId(authorId),
           });
-          const savedQuestion = await newQuestion.save();
           resolvedIds.push(savedQuestion._id as Types.ObjectId);
         }
       }
@@ -70,7 +68,7 @@ export class QuizzesService {
       dto.questions,
     );
 
-    const quiz = new this.quizModel({
+    const saved = await this.quizRepository.create({
       title: dto.title,
       description: dto.description ?? '',
       coverImage: dto.coverImage ?? '',
@@ -79,7 +77,6 @@ export class QuizzesService {
       author: new Types.ObjectId(authorId),
     });
 
-    const saved = await quiz.save();
     return this.findOne(saved._id.toString());
   }
 
@@ -96,32 +93,18 @@ export class QuizzesService {
         filter.author = new Types.ObjectId(authorId);
       }
     }
-    return this.quizModel
-      .find(filter)
-      .populate('author', 'username avatarUrl')
-      .populate('questions')
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.quizRepository.findWithDetails(filter);
   }
 
   async findAllAdmin(): Promise<QuizDocument[]> {
-    return this.quizModel
-      .find()
-      .populate('author', 'username avatarUrl')
-      .populate('questions')
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.quizRepository.findWithDetails({});
   }
 
   async findOne(id: string): Promise<QuizDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Invalid quiz ID');
     }
-    const quiz = await this.quizModel
-      .findById(id)
-      .populate('author', 'username avatarUrl')
-      .populate('questions')
-      .exec();
+    const quiz = await this.quizRepository.findByIdWithDetails(id);
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
@@ -179,11 +162,11 @@ export class QuizzesService {
       throw new ForbiddenException('Not authorized to delete this quiz');
     }
 
-    await this.quizModel.findByIdAndDelete(id).exec();
+    await this.quizRepository.findByIdAndDelete(id);
     return { success: true };
   }
 
   async incrementPlayCount(id: string): Promise<void> {
-    await this.quizModel.findByIdAndUpdate(id, { $inc: { playCount: 1 } });
+    await this.quizRepository.incrementPlayCount(id);
   }
 }

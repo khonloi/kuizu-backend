@@ -2,26 +2,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { QuestionsService } from './questions.service';
+import { QuestionRepository } from './repositories';
 
 describe('QuestionsService', () => {
   let service: QuestionsService;
-  let mockQuestionModel: any;
+  let mockQuestionRepository: any;
 
   beforeEach(() => {
-    mockQuestionModel = vi.fn().mockImplementation(function (
-      this: any,
-      dto: any,
-    ) {
-      Object.assign(this, dto);
-      this.save = vi
-        .fn()
-        .mockResolvedValue({ _id: new Types.ObjectId(), ...dto });
-    });
-    mockQuestionModel.find = vi.fn();
-    mockQuestionModel.findById = vi.fn();
-    mockQuestionModel.findByIdAndDelete = vi.fn();
+    mockQuestionRepository = {
+      create: vi.fn().mockImplementation((dto) => ({
+        _id: new Types.ObjectId(),
+        ...dto,
+      })),
+      findWithDetails: vi.fn(),
+      findByIdWithDetails: vi.fn(),
+      findByIdAndDelete: vi.fn(),
+    };
 
-    service = new QuestionsService(mockQuestionModel);
+    service = new QuestionsService(
+      mockQuestionRepository as unknown as QuestionRepository,
+    );
   });
 
   describe('create', () => {
@@ -44,19 +44,15 @@ describe('QuestionsService', () => {
       const res = await service.create(authorId, dto as any);
       expect(res.questionText).toBe(dto.questionText);
       expect(res.author.toString()).toBe(authorId);
+      expect(mockQuestionRepository.create).toHaveBeenCalled();
     });
   });
 
   describe('findAll', () => {
-    it('should query with filters and populate author', async () => {
+    it('should query with filters and return questions', async () => {
       const authorId = new Types.ObjectId().toString();
       const mockQuestions = [{ questionText: 'Q1' }];
-      const queryMock = {
-        populate: vi.fn().mockReturnThis(),
-        sort: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestions),
-      };
-      mockQuestionModel.find.mockReturnValue(queryMock);
+      mockQuestionRepository.findWithDetails.mockResolvedValue(mockQuestions);
 
       const res = await service.findAll({
         authorId,
@@ -65,16 +61,12 @@ describe('QuestionsService', () => {
         difficulty: 'easy',
       });
 
-      expect(mockQuestionModel.find).toHaveBeenCalledWith({
+      expect(mockQuestionRepository.findWithDetails).toHaveBeenCalledWith({
         author: new Types.ObjectId(authorId),
         tags: 'js',
         difficulty: 'easy',
         questionText: { $regex: 'script', $options: 'i' },
       });
-      expect(queryMock.populate).toHaveBeenCalledWith(
-        'author',
-        'username avatarUrl',
-      );
       expect(res).toEqual(mockQuestions);
     });
   });
@@ -88,10 +80,7 @@ describe('QuestionsService', () => {
 
     it('should throw NotFoundException if question does not exist', async () => {
       const validId = new Types.ObjectId().toString();
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(null),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(null);
 
       await expect(service.findOne(validId)).rejects.toThrow(NotFoundException);
     });
@@ -99,10 +88,9 @@ describe('QuestionsService', () => {
     it('should return question if found', async () => {
       const validId = new Types.ObjectId().toString();
       const mockQuestion = { _id: validId, questionText: 'Q1' };
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
 
       const res = await service.findOne(validId);
       expect(res).toEqual(mockQuestion);
@@ -120,10 +108,9 @@ describe('QuestionsService', () => {
         save: vi.fn(),
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
 
       await expect(
         service.update(id, otherUserId, { questionText: 'Updated' }, false),
@@ -140,10 +127,9 @@ describe('QuestionsService', () => {
         save: vi.fn().mockResolvedValue({ _id: id, questionText: 'New' }),
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
 
       const res = await service.update(
         id,
@@ -168,10 +154,9 @@ describe('QuestionsService', () => {
           .mockResolvedValue({ _id: id, questionText: 'Admin Update' }),
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
 
       const res = await service.update(
         id,
@@ -194,10 +179,9 @@ describe('QuestionsService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
 
       await expect(service.delete(id, otherUserId, false)).rejects.toThrow(
         ForbiddenException,
@@ -212,17 +196,14 @@ describe('QuestionsService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
-      mockQuestionModel.findByIdAndDelete.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ _id: id }),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
+      mockQuestionRepository.findByIdAndDelete.mockResolvedValue({ _id: id });
 
       const res = await service.delete(id, authorId, false);
       expect(res).toEqual({ success: true });
-      expect(mockQuestionModel.findByIdAndDelete).toHaveBeenCalledWith(id);
+      expect(mockQuestionRepository.findByIdAndDelete).toHaveBeenCalledWith(id);
     });
 
     it('should allow admin to delete any question', async () => {
@@ -234,17 +215,14 @@ describe('QuestionsService', () => {
         author: { _id: new Types.ObjectId(authorId) },
       };
 
-      mockQuestionModel.findById.mockReturnValue({
-        populate: vi.fn().mockReturnThis(),
-        exec: vi.fn().mockResolvedValue(mockQuestion),
-      });
-      mockQuestionModel.findByIdAndDelete.mockReturnValue({
-        exec: vi.fn().mockResolvedValue({ _id: id }),
-      });
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(
+        mockQuestion,
+      );
+      mockQuestionRepository.findByIdAndDelete.mockResolvedValue({ _id: id });
 
       const res = await service.delete(id, adminId, true);
       expect(res).toEqual({ success: true });
-      expect(mockQuestionModel.findByIdAndDelete).toHaveBeenCalledWith(id);
+      expect(mockQuestionRepository.findByIdAndDelete).toHaveBeenCalledWith(id);
     });
   });
 });

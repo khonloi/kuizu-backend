@@ -4,36 +4,30 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Course, CourseDocument, Lesson } from './schemas/course.schema';
-import {
-  UserProgress,
-  UserProgressDocument,
-} from './schemas/user-progress.schema';
-import { UsersService } from '../users/users.service';
+import { Types } from 'mongoose';
+import { CourseDocument, Lesson } from './schemas/course.schema';
+import { GamificationService } from '../gamification/gamification.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
+import { CourseRepository, UserProgressRepository } from './repositories';
 
 @Injectable()
 export class CoursesService {
   constructor(
-    @InjectModel(Course.name)
-    private readonly courseModel: Model<CourseDocument>,
-    @InjectModel(UserProgress.name)
-    private readonly progressModel: Model<UserProgressDocument>,
-    private readonly usersService: UsersService,
+    private readonly courseRepository: CourseRepository,
+    private readonly progressRepository: UserProgressRepository,
+    private readonly gamificationService: GamificationService,
   ) {}
 
   async findAll(): Promise<CourseDocument[]> {
-    return this.courseModel.find({ isPublished: true }).exec();
+    return this.courseRepository.findPublished();
   }
 
   async findAllAdmin(): Promise<CourseDocument[]> {
-    return this.courseModel.find().exec();
+    return this.courseRepository.findAllCourses();
   }
 
   async findBySlug(slug: string): Promise<CourseDocument> {
-    const course = await this.courseModel.findOne({ slug }).exec();
+    const course = await this.courseRepository.findBySlug(slug);
     if (!course) {
       throw new NotFoundException(`Course '${slug}' not found`);
     }
@@ -44,7 +38,7 @@ export class CoursesService {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException(`Invalid course ID format`);
     }
-    const course = await this.courseModel.findById(id).exec();
+    const course = await this.courseRepository.findById(id);
     if (!course) {
       throw new NotFoundException(`Course with ID '${id}' not found`);
     }
@@ -52,23 +46,20 @@ export class CoursesService {
   }
 
   async create(dto: CreateCourseDto): Promise<CourseDocument> {
-    const existing = await this.courseModel.findOne({ slug: dto.slug }).exec();
+    const existing = await this.courseRepository.findBySlug(dto.slug);
     if (existing) {
       throw new ConflictException(
         `Course with slug '${dto.slug}' already exists`,
       );
     }
-    const course = new this.courseModel(dto);
-    return course.save();
+    return this.courseRepository.createCourse(dto);
   }
 
   async update(id: string, dto: UpdateCourseDto): Promise<CourseDocument> {
     const course = await this.findById(id);
 
     if (dto.slug && dto.slug !== course.slug) {
-      const existing = await this.courseModel
-        .findOne({ slug: dto.slug })
-        .exec();
+      const existing = await this.courseRepository.findBySlug(dto.slug);
       if (existing) {
         throw new ConflictException(
           `Course with slug '${dto.slug}' already exists`,
@@ -82,7 +73,7 @@ export class CoursesService {
 
   async delete(id: string): Promise<{ success: boolean; message: string }> {
     await this.findById(id);
-    await this.courseModel.findByIdAndDelete(id).exec();
+    await this.courseRepository.deleteCourse(id);
     return {
       success: true,
       message: 'Course deleted successfully',
@@ -104,13 +95,13 @@ export class CoursesService {
   }
 
   async getUserProgress(userId: string, courseSlug: string) {
-    let progress = await this.progressModel.findOne({
-      user: new Types.ObjectId(userId),
+    let progress = await this.progressRepository.findByUserAndCourse(
+      userId,
       courseSlug,
-    });
+    );
 
     if (!progress) {
-      progress = await this.progressModel.create({
+      progress = await this.progressRepository.createProgress({
         user: new Types.ObjectId(userId),
         courseSlug,
         completedLessonIds: [],
@@ -128,13 +119,13 @@ export class CoursesService {
     lessonId: string,
     xp = 15,
   ) {
-    let progress = await this.progressModel.findOne({
-      user: new Types.ObjectId(userId),
+    let progress = await this.progressRepository.findByUserAndCourse(
+      userId,
       courseSlug,
-    });
+    );
 
     if (!progress) {
-      progress = new this.progressModel({
+      progress = await this.progressRepository.createProgress({
         user: new Types.ObjectId(userId),
         courseSlug,
         completedLessonIds: [],
@@ -150,7 +141,7 @@ export class CoursesService {
     }
 
     // Update user global XP
-    await this.usersService.addXp(userId, xp);
+    await this.gamificationService.addXp(userId, xp);
 
     return {
       success: true,

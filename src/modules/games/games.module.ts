@@ -5,6 +5,7 @@ import { GameStateStore } from './game-state.store';
 import { QuizzesModule } from '../quizzes/quizzes.module';
 import { AuthModule } from '../auth/auth.module';
 import { GameSession, GameSessionSchema } from './schemas/game-session.schema';
+import { GameSessionRepository } from './repositories';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { GameSession, GameSessionSchema } from './schemas/game-session.schema';
       { name: GameSession.name, schema: GameSessionSchema },
     ]),
   ],
-  providers: [GamesGateway, GameStateStore],
-  exports: [GamesGateway, GameStateStore],
+  providers: [GamesGateway, GameStateStore, GameSessionRepository],
+  exports: [GamesGateway, GameStateStore, GameSessionRepository],
 })
 export class GamesModule {}
