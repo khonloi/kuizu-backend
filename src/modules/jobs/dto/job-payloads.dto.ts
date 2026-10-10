@@ -1,10 +1,14 @@
-export interface VerificationEmailPayload {
+export interface BaseJobPayload {
+  correlationId?: string;
+}
+
+export interface VerificationEmailPayload extends BaseJobPayload {
   to: string;
   username: string;
   token: string;
 }
 
-export interface PasswordResetEmailPayload {
+export interface PasswordResetEmailPayload extends BaseJobPayload {
   to: string;
   username: string;
   token: string;
@@ -16,7 +20,7 @@ export interface PlayerReportItem {
   rank: number;
 }
 
-export interface GameSessionReportPayload {
+export interface GameSessionReportPayload extends BaseJobPayload {
   pin: string;
   hostUserId?: string | null;
   quizId: string;
@@ -24,6 +28,6 @@ export interface GameSessionReportPayload {
   players: PlayerReportItem[];
 }
 
-export interface LeagueCalculationPayload {
+export interface LeagueCalculationPayload extends BaseJobPayload {
   timestamp?: string;
 }

@@ -20,8 +20,10 @@ export class GameReportsProcessor extends WorkerHost {
   async process(
     job: Job<any, any, string>,
   ): Promise<{ saved: boolean; pin: string }> {
+    const correlationId = (job.data as { correlationId?: string })
+      ?.correlationId;
     this.logger.debug(
-      `Processing game report job '${job.name}' (id: ${job.id})`,
+      `Processing game report job '${job.name}' (id: ${job.id}) [corrId: ${correlationId || 'none'}]`,
     );
 
     switch (job.name) {
@@ -36,6 +38,9 @@ export class GameReportsProcessor extends WorkerHost {
   async handleSaveGameSession(
     data: GameSessionReportPayload,
   ): Promise<{ saved: boolean; pin: string }> {
+    const corrTag = data.correlationId
+      ? ` [corrId: ${data.correlationId}]`
+      : '';
     try {
       const hostObjectId =
         data.hostUserId && Types.ObjectId.isValid(data.hostUserId)
@@ -58,18 +63,18 @@ export class GameReportsProcessor extends WorkerHost {
 
         await this.quizRepository.incrementPlayCount(data.quizId);
         this.logger.log(
-          `[GameReports] Successfully persisted game session PIN: ${data.pin} with ${data.players.length} players.`,
+          `[GameReports] Successfully persisted game session PIN: ${data.pin} with ${data.players.length} players.${corrTag}`,
         );
         return { saved: true, pin: data.pin };
       }
 
       this.logger.warn(
-        `[GameReports] Invalid quizId ${data.quizId} for PIN: ${data.pin}`,
+        `[GameReports] Invalid quizId ${data.quizId} for PIN: ${data.pin}${corrTag}`,
       );
       return { saved: false, pin: data.pin };
     } catch (err: any) {
       this.logger.error(
-        `[GameReports] Failed to persist game session ${data.pin}: ${err.message}`,
+        `[GameReports] Failed to persist game session ${data.pin}: ${err.message}${corrTag}`,
         err.stack,
       );
       throw err;

@@ -13,7 +13,11 @@ export class EmailProcessor extends WorkerHost {
   async process(
     job: Job<any, any, string>,
   ): Promise<{ sent: boolean; type: string }> {
-    this.logger.debug(`Processing email job '${job.name}' (id: ${job.id})`);
+    const correlationId = (job.data as { correlationId?: string })
+      ?.correlationId;
+    this.logger.debug(
+      `Processing email job '${job.name}' (id: ${job.id}) [corrId: ${correlationId || 'none'}]`,
+    );
 
     switch (job.name) {
       case 'send-verification-email':
@@ -33,8 +37,11 @@ export class EmailProcessor extends WorkerHost {
   async handleVerificationEmail(
     data: VerificationEmailPayload,
   ): Promise<{ sent: boolean; type: string }> {
+    const corrTag = data.correlationId
+      ? ` [corrId: ${data.correlationId}]`
+      : '';
     this.logger.log(
-      `[EmailService] Sending email verification to ${data.to} (user: ${data.username}). Token: ${data.token.slice(0, 8)}...`,
+      `[EmailService] Sending email verification to ${data.to} (user: ${data.username}). Token: ${data.token.slice(0, 8)}...${corrTag}`,
     );
     // Simulated async email delivery (e.g. via SendGrid, Resend, or SMTP)
     return { sent: true, type: 'verification' };
@@ -43,8 +50,11 @@ export class EmailProcessor extends WorkerHost {
   async handlePasswordResetEmail(
     data: PasswordResetEmailPayload,
   ): Promise<{ sent: boolean; type: string }> {
+    const corrTag = data.correlationId
+      ? ` [corrId: ${data.correlationId}]`
+      : '';
     this.logger.log(
-      `[EmailService] Sending password reset link to ${data.to} (user: ${data.username}). Token: ${data.token.slice(0, 8)}...`,
+      `[EmailService] Sending password reset link to ${data.to} (user: ${data.username}). Token: ${data.token.slice(0, 8)}...${corrTag}`,
     );
     // Simulated async email delivery
     return { sent: true, type: 'password-reset' };

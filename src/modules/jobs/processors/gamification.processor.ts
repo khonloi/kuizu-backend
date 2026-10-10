@@ -26,8 +26,10 @@ export class GamificationProcessor extends WorkerHost {
   async process(
     job: Job<any, any, string>,
   ): Promise<{ promoted: number; demoted: number; evaluated: number }> {
+    const correlationId = (job.data as { correlationId?: string })
+      ?.correlationId;
     this.logger.debug(
-      `Processing gamification job '${job.name}' (id: ${job.id})`,
+      `Processing gamification job '${job.name}' (id: ${job.id}) [corrId: ${correlationId || 'none'}]`,
     );
 
     switch (job.name) {
@@ -42,9 +44,14 @@ export class GamificationProcessor extends WorkerHost {
   }
 
   async handleLeagueCalculation(
-    _data: LeagueCalculationPayload,
+    data: LeagueCalculationPayload = {},
   ): Promise<{ promoted: number; demoted: number; evaluated: number }> {
-    this.logger.log('Starting league standings calculation and adjustments...');
+    const corrTag = data.correlationId
+      ? ` [corrId: ${data.correlationId}]`
+      : '';
+    this.logger.log(
+      `Starting league standings calculation and adjustments...${corrTag}`,
+    );
 
     let promotedCount = 0;
     let demotedCount = 0;

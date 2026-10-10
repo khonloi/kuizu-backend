@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -12,6 +12,7 @@ import { Keyv } from 'keyv';
 import { validateEnv } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { RedisModule } from './common/redis/redis.module';
 import { RedisService } from './common/redis/redis.service';
 import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
@@ -64,9 +65,15 @@ import { JobsModule } from './modules/jobs/jobs.module';
                 },
             autoLogging: true,
             genReqId: (req, res) => {
-              const existing = req.headers['x-request-id'];
-              const id = (existing as string) || randomUUID();
+              const existing =
+                req.headers['x-request-id'] || req.headers['x-correlation-id'];
+              const id =
+                (Array.isArray(existing) ? existing[0] : existing) ||
+                randomUUID();
+              req.headers['x-request-id'] = id;
+              req.headers['x-correlation-id'] = id;
               res.setHeader('X-Request-Id', id);
+              res.setHeader('X-Correlation-Id', id);
               return id;
             },
           },
@@ -146,4 +153,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { VersioningType } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -37,6 +38,12 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix('api');
+
+  // API Versioning (URI based: /api/v1/...)
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
 
   // Global validation pipe
   app.useGlobalPipes(new ZodValidationPipe());
@@ -94,7 +101,9 @@ async function bootstrap() {
   }
 
   await app.listen(port);
-  logger.log(`🚀 Kuizu Backend API running at: http://localhost:${port}/api`);
+  logger.log(
+    `🚀 Kuizu Backend API running at: http://localhost:${port}/api/v1`,
+  );
   logger.log(
     `📖 Swagger API Docs accessible at: http://localhost:${port}/api/docs`,
   );
