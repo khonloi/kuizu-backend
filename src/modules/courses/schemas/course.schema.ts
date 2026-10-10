@@ -10,7 +10,13 @@ export class Exercise {
 
   @Prop({
     required: true,
-    enum: ['multiple-choice', 'translate', 'match-pairs', 'fill-blank', 'listen'],
+    enum: [
+      'multiple-choice',
+      'translate',
+      'match-pairs',
+      'fill-blank',
+      'listen',
+    ],
     default: 'multiple-choice',
   })
   type: string;
@@ -98,3 +104,6 @@ export class Course {
 }
 
 export const CourseSchema = SchemaFactory.createForClass(Course);
+CourseSchema.index({ isPublished: 1, createdAt: -1 });
+CourseSchema.index({ isPublished: 1, _id: -1 });
+CourseSchema.index({ title: 'text', description: 'text' });

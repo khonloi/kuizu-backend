@@ -27,6 +27,7 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
 
 @ApiTags('Quizzes')
 @Controller('quizzes')
@@ -37,15 +38,43 @@ export class QuizzesController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(30000)
   @Get()
-  @ApiOperation({ summary: 'List public quizzes' })
-  async findAll(@Query('author') authorId?: string) {
+  @ApiOperation({ summary: 'List public quizzes with pagination' })
+  async findAll(
+    @Query('author') authorId?: string,
+    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
+    pagination?: PaginationQueryDto,
+  ) {
+    if (
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode)
+    ) {
+      return this.quizzesService.findAll(false, authorId, pagination);
+    }
     return this.quizzesService.findAll(false, authorId);
   }
 
   @ApiBearerAuth()
   @Get('my')
   @ApiOperation({ summary: 'Get quizzes created by logged-in user' })
-  async findMyQuizzes(@CurrentUser('id') userId: string) {
+  async findMyQuizzes(
+    @CurrentUser('id') userId: string,
+    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
+    pagination?: PaginationQueryDto,
+  ) {
+    if (
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode)
+    ) {
+      return this.quizzesService.findAll(true, userId, pagination);
+    }
     return this.quizzesService.findAll(true, userId);
   }
 
@@ -53,7 +82,20 @@ export class QuizzesController {
   @Roles('admin')
   @Get('admin/all')
   @ApiOperation({ summary: 'List all quizzes including private (Admin only)' })
-  async findAllAdmin() {
+  async findAllAdmin(
+    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
+    pagination?: PaginationQueryDto,
+  ) {
+    if (
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode)
+    ) {
+      return this.quizzesService.findAllAdmin(pagination);
+    }
     return this.quizzesService.findAllAdmin();
   }
 

@@ -10,6 +10,7 @@ import { Question } from './schemas/question.schema';
 import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto } from './dto/question.dto';
 import { QuizRepository, QuestionRepository } from './repositories';
+import { PaginationQueryInputDto, PaginatedResponse } from '../../common/dto';
 
 @Injectable()
 export class QuizzesService {
@@ -83,7 +84,8 @@ export class QuizzesService {
   async findAll(
     includePrivate = false,
     authorId?: string,
-  ): Promise<QuizDocument[]> {
+    query?: PaginationQueryInputDto,
+  ): Promise<PaginatedResponse<QuizDocument> | QuizDocument[]> {
     const filter: Record<string, unknown> = {};
     if (!includePrivate) {
       filter.isPublic = true;
@@ -93,11 +95,19 @@ export class QuizzesService {
         filter.author = new Types.ObjectId(authorId);
       }
     }
-    return this.quizRepository.findWithDetails(filter);
+    if (!query) {
+      return this.quizRepository.findWithDetails(filter);
+    }
+    return this.quizRepository.findPaginatedWithDetails(filter, query);
   }
 
-  async findAllAdmin(): Promise<QuizDocument[]> {
-    return this.quizRepository.findWithDetails({});
+  async findAllAdmin(
+    query?: PaginationQueryInputDto,
+  ): Promise<PaginatedResponse<QuizDocument> | QuizDocument[]> {
+    if (!query) {
+      return this.quizRepository.findWithDetails({});
+    }
+    return this.quizRepository.findPaginatedWithDetails({}, query);
   }
 
   async findOne(id: string): Promise<QuizDocument> {

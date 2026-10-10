@@ -7,6 +7,7 @@ import { User, UserDocument, SessionInfo } from './schemas/user.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
+import { createOffsetPaginatedResponse } from '../../common/dto';
 
 @Injectable()
 export class UsersService {
@@ -204,13 +205,7 @@ export class UsersService {
       this.userRepository.findPaginatedUsers(filter, skip, limit),
     ]);
 
-    return {
-      data: users,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return createOffsetPaginatedResponse(users, total, page, limit);
   }
 
   async findAdminUserById(id: string): Promise<UserDocument> {

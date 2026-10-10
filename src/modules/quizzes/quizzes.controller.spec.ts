@@ -53,6 +53,51 @@ describe('QuizzesController', () => {
     expect(spy).toHaveBeenCalled();
   });
 
+  it('findAll should delegate to service.findAll with pagination when provided', async () => {
+    const mockResult = {
+      data: [{ title: 'Q1' }],
+      meta: { limit: 10, page: 2, hasNextPage: false },
+    };
+    const spy = vi
+      .spyOn(service, 'findAll')
+      .mockResolvedValue(mockResult as any);
+
+    const pagination = { page: 2, limit: 10, sortOrder: 'desc' as const };
+    const res = await controller.findAll('author-123', pagination);
+    expect(res).toBe(mockResult);
+    expect(spy).toHaveBeenCalledWith(false, 'author-123', pagination);
+  });
+
+  it('findMyQuizzes should delegate to service.findAll with pagination when provided', async () => {
+    const mockResult = {
+      data: [{ title: 'My Quiz' }],
+      meta: { limit: 5, page: 1, hasNextPage: false },
+    };
+    const spy = vi
+      .spyOn(service, 'findAll')
+      .mockResolvedValue(mockResult as any);
+
+    const pagination = { page: 1, limit: 5, sortOrder: 'desc' as const };
+    const res = await controller.findMyQuizzes('user-123', pagination);
+    expect(res).toBe(mockResult);
+    expect(spy).toHaveBeenCalledWith(true, 'user-123', pagination);
+  });
+
+  it('findAllAdmin should delegate to service.findAllAdmin with pagination when provided', async () => {
+    const mockResult = {
+      data: [{ title: 'Admin Q' }],
+      meta: { limit: 20, page: 1, hasNextPage: false },
+    };
+    const spy = vi
+      .spyOn(service, 'findAllAdmin')
+      .mockResolvedValue(mockResult as any);
+
+    const pagination = { page: 1, limit: 20, sortOrder: 'desc' as const };
+    const res = await controller.findAllAdmin(pagination);
+    expect(res).toBe(mockResult);
+    expect(spy).toHaveBeenCalledWith(pagination);
+  });
+
   it('findOne should delegate to service.findOne', async () => {
     const mockQuiz = { title: 'Specific Quiz' };
     const spy = vi.spyOn(service, 'findOne').mockResolvedValue(mockQuiz as any);

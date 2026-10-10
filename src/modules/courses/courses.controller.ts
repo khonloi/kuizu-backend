@@ -6,10 +6,11 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 
 import {
   ApiTags,
@@ -29,6 +30,7 @@ import {
   UpdateCourseDto,
   updateCourseSchema,
 } from './dto/course.dto';
+import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
 
 @ApiTags('Courses')
 @Controller('courses')
@@ -37,11 +39,23 @@ export class CoursesController {
 
   @Public()
   @UseInterceptors(CacheInterceptor)
-  @CacheKey('courses:published')
   @CacheTTL(60000)
   @Get()
-  @ApiOperation({ summary: 'List all published courses' })
-  async getCourses() {
+  @ApiOperation({ summary: 'List all published courses with pagination' })
+  async getCourses(
+    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
+    pagination?: PaginationQueryDto,
+  ) {
+    if (
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode)
+    ) {
+      return this.coursesService.findAll(pagination);
+    }
     return this.coursesService.findAll();
   }
 
@@ -52,7 +66,20 @@ export class CoursesController {
   @ApiOperation({
     summary: 'List all courses including unpublished (Admin/Teacher only)',
   })
-  async getAllCoursesAdmin() {
+  async getAllCoursesAdmin(
+    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
+    pagination?: PaginationQueryDto,
+  ) {
+    if (
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode)
+    ) {
+      return this.coursesService.findAllAdmin(pagination);
+    }
     return this.coursesService.findAllAdmin();
   }
 

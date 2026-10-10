@@ -9,6 +9,7 @@ import { CourseDocument, Lesson } from './schemas/course.schema';
 import { GamificationService } from '../gamification/gamification.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
 import { CourseRepository, UserProgressRepository } from './repositories';
+import { PaginationQueryInputDto, PaginatedResponse } from '../../common/dto';
 
 @Injectable()
 export class CoursesService {
@@ -18,12 +19,22 @@ export class CoursesService {
     private readonly gamificationService: GamificationService,
   ) {}
 
-  async findAll(): Promise<CourseDocument[]> {
-    return this.courseRepository.findPublished();
+  async findAll(
+    query?: PaginationQueryInputDto,
+  ): Promise<PaginatedResponse<CourseDocument> | CourseDocument[]> {
+    if (!query) {
+      return this.courseRepository.findPublished();
+    }
+    return this.courseRepository.findPublishedPaginated(query);
   }
 
-  async findAllAdmin(): Promise<CourseDocument[]> {
-    return this.courseRepository.findAllCourses();
+  async findAllAdmin(
+    query?: PaginationQueryInputDto,
+  ): Promise<PaginatedResponse<CourseDocument> | CourseDocument[]> {
+    if (!query) {
+      return this.courseRepository.findAllCourses();
+    }
+    return this.courseRepository.findAllCoursesPaginated(query);
   }
 
   async findBySlug(slug: string): Promise<CourseDocument> {

@@ -21,6 +21,7 @@ describe('QuizzesService', () => {
         ...dto,
       })),
       findWithDetails: vi.fn(),
+      findPaginatedWithDetails: vi.fn(),
       findByIdWithDetails: vi.fn(),
       findByIdAndDelete: vi.fn(),
       incrementPlayCount: vi.fn(),
@@ -135,6 +136,65 @@ describe('QuizzesService', () => {
       const res = await service.findAllAdmin();
       expect(mockQuizRepository.findWithDetails).toHaveBeenCalledWith({});
       expect(res.length).toBe(2);
+    });
+
+    it('should delegate to findPaginatedWithDetails when pagination query is provided to findAll', async () => {
+      const mockPaginated = {
+        data: [{ title: 'Paginated Q' }],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+          nextCursor: null,
+        },
+      };
+      mockQuizRepository.findPaginatedWithDetails.mockResolvedValue(
+        mockPaginated,
+      );
+
+      const query = {
+        page: 1,
+        limit: 10,
+        search: 'test',
+        sortOrder: 'desc' as const,
+      };
+      const res = await service.findAll(false, undefined, query);
+
+      expect(mockQuizRepository.findPaginatedWithDetails).toHaveBeenCalledWith(
+        { isPublic: true },
+        query,
+      );
+      expect(res).toBe(mockPaginated);
+    });
+
+    it('should delegate to findPaginatedWithDetails when pagination query is provided to findAllAdmin', async () => {
+      const mockPaginated = {
+        data: [{ title: 'Admin Paginated' }],
+        meta: {
+          total: 1,
+          page: 2,
+          limit: 5,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: true,
+          nextCursor: null,
+        },
+      };
+      mockQuizRepository.findPaginatedWithDetails.mockResolvedValue(
+        mockPaginated,
+      );
+
+      const query = { page: 2, limit: 5, sortOrder: 'desc' as const };
+      const res = await service.findAllAdmin(query);
+
+      expect(mockQuizRepository.findPaginatedWithDetails).toHaveBeenCalledWith(
+        {},
+        query,
+      );
+      expect(res).toBe(mockPaginated);
     });
   });
 

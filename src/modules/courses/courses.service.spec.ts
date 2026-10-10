@@ -19,6 +19,8 @@ describe('CoursesService', () => {
     mockCourseRepository = {
       findPublished: vi.fn(),
       findAllCourses: vi.fn(),
+      findPublishedPaginated: vi.fn(),
+      findAllCoursesPaginated: vi.fn(),
       findBySlug: vi.fn(),
       findById: vi.fn(),
       createCourse: vi.fn().mockImplementation((dto) => ({
@@ -65,6 +67,58 @@ describe('CoursesService', () => {
       const res = await service.findAllAdmin();
       expect(mockCourseRepository.findAllCourses).toHaveBeenCalled();
       expect(res).toEqual(mockResult);
+    });
+
+    it('should delegate to findPublishedPaginated when pagination query is provided to findAll', async () => {
+      const mockPaginated = {
+        data: [{ title: 'Japanese 1' }],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+          nextCursor: null,
+        },
+      };
+      mockCourseRepository.findPublishedPaginated.mockResolvedValue(
+        mockPaginated,
+      );
+
+      const query = { page: 1, limit: 10, sortOrder: 'desc' as const };
+      const res = await service.findAll(query);
+
+      expect(mockCourseRepository.findPublishedPaginated).toHaveBeenCalledWith(
+        query,
+      );
+      expect(res).toBe(mockPaginated);
+    });
+
+    it('should delegate to findAllCoursesPaginated when pagination query is provided to findAllAdmin', async () => {
+      const mockPaginated = {
+        data: [{ title: 'Admin Course' }],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+          nextCursor: null,
+        },
+      };
+      mockCourseRepository.findAllCoursesPaginated.mockResolvedValue(
+        mockPaginated,
+      );
+
+      const query = { page: 1, limit: 10, sortOrder: 'desc' as const };
+      const res = await service.findAllAdmin(query);
+
+      expect(mockCourseRepository.findAllCoursesPaginated).toHaveBeenCalledWith(
+        query,
+      );
+      expect(res).toBe(mockPaginated);
     });
   });
 

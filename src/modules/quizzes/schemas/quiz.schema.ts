@@ -43,5 +43,8 @@ export class Quiz {
 }
 
 export const QuizSchema = SchemaFactory.createForClass(Quiz);
-QuizSchema.index({ author: 1 });
-QuizSchema.index({ isPublic: 1 });
+QuizSchema.index({ author: 1, createdAt: -1 });
+QuizSchema.index({ isPublic: 1, createdAt: -1 });
+QuizSchema.index({ isPublic: 1, playCount: -1 });
+QuizSchema.index({ isPublic: 1, _id: -1 });
+QuizSchema.index({ title: 'text', description: 'text' });

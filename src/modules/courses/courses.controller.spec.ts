@@ -33,6 +33,19 @@ describe('CoursesController', () => {
     expect(spy).toHaveBeenCalled();
   });
 
+  it('getCourses should delegate to service.findAll with pagination when provided', async () => {
+    const expected = {
+      data: [{ title: 'Japanese' }],
+      meta: { limit: 10, page: 1, hasNextPage: false },
+    };
+    const spy = vi.spyOn(service, 'findAll').mockResolvedValue(expected as any);
+
+    const pagination = { page: 1, limit: 10, sortOrder: 'desc' as const };
+    const res = await controller.getCourses(pagination);
+    expect(res).toBe(expected);
+    expect(spy).toHaveBeenCalledWith(pagination);
+  });
+
   it('getAllCoursesAdmin should delegate to service.findAllAdmin', async () => {
     const expected = [{ title: 'Course 1' }, { title: 'Draft' }];
     const spy = vi
@@ -42,6 +55,21 @@ describe('CoursesController', () => {
     const res = await controller.getAllCoursesAdmin();
     expect(res).toBe(expected);
     expect(spy).toHaveBeenCalled();
+  });
+
+  it('getAllCoursesAdmin should delegate to service.findAllAdmin with pagination when provided', async () => {
+    const expected = {
+      data: [{ title: 'Course 1' }],
+      meta: { limit: 10, page: 2, hasNextPage: false },
+    };
+    const spy = vi
+      .spyOn(service, 'findAllAdmin')
+      .mockResolvedValue(expected as any);
+
+    const pagination = { page: 2, limit: 10, sortOrder: 'desc' as const };
+    const res = await controller.getAllCoursesAdmin(pagination);
+    expect(res).toBe(expected);
+    expect(spy).toHaveBeenCalledWith(pagination);
   });
 
   it('createCourse should delegate to service.create', async () => {

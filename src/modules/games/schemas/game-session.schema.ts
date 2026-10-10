@@ -42,6 +42,6 @@ export class GameSession {
 }
 
 export const GameSessionSchema = SchemaFactory.createForClass(GameSession);
-GameSessionSchema.index({ host: 1 });
-GameSessionSchema.index({ quiz: 1 });
-GameSessionSchema.index({ pin: 1 });
+GameSessionSchema.index({ host: 1, createdAt: -1 });
+GameSessionSchema.index({ quiz: 1, createdAt: -1 });
+GameSessionSchema.index({ pin: 1, status: 1 });
