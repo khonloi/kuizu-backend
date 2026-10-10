@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
+import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -81,6 +82,16 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
+
+  // Attach distributed Redis WebSocket adapter if REDIS_URI is present
+  const redisUri = configService.get<string>('REDIS_URI');
+  if (redisUri) {
+    const redisIoAdapter = new RedisIoAdapter(app);
+    const connected = await redisIoAdapter.connectToRedis(redisUri);
+    if (connected) {
+      app.useWebSocketAdapter(redisIoAdapter);
+    }
+  }
 
   await app.listen(port);
   logger.log(`🚀 Kuizu Backend API running at: http://localhost:${port}/api`);

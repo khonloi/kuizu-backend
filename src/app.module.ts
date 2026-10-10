@@ -2,14 +2,19 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { CacheModule } from '@nestjs/cache-manager';
+import { CacheModule, CacheModuleOptions } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
+import KeyvRedis from '@keyv/redis';
+import { Keyv } from 'keyv';
 
 import { validateEnv } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { RedisModule } from './common/redis/redis.module';
+import { RedisService } from './common/redis/redis.service';
+import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
 
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -76,15 +81,44 @@ import { DatabaseModule } from './database/database.module';
           'mongodb://127.0.0.1:27017/kuizu',
       }),
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 120,
-      },
-    ]),
-    CacheModule.register({
+    RedisModule,
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisService],
+      useFactory: (redisService: RedisService) => ({
+        throttlers: [
+          {
+            ttl: 60000,
+            limit: 120,
+          },
+        ],
+        storage: new RedisThrottlerStorageService(redisService),
+      }),
+    }),
+    CacheModule.registerAsync<CacheModuleOptions>({
       isGlobal: true,
-      ttl: 30000,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService): CacheModuleOptions => {
+        const redisUri = configService.get<string>('REDIS_URI');
+        if (redisUri) {
+          try {
+            const keyv = new Keyv({
+              store: new KeyvRedis(redisUri),
+              namespace: 'kuizu:cache',
+            });
+            return {
+              stores: [keyv],
+              ttl: 30000,
+            };
+          } catch {
+            return { ttl: 30000 };
+          }
+        }
+        return {
+          ttl: 30000,
+        };
+      },
     }),
     HealthModule,
     AuthModule,
