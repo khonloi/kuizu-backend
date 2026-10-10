@@ -116,6 +116,39 @@ describe('AuthService', () => {
       );
     });
 
+    it('should delegate verification email to jobsProducerService when provided', async () => {
+      const mockJobsProducer = {
+        sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+        sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const customAuthService = new AuthService(
+        mockUsersService,
+        mockJwtService,
+        mockConfigService,
+        mockJobsProducer as any,
+      );
+
+      mockUsersService.findByEmail.mockResolvedValue(null);
+      mockUsersService.findByUsername.mockResolvedValue(null);
+      mockUsersService.create.mockResolvedValue(mockUser);
+      vi.mocked(bcrypt.hash).mockResolvedValue('hashed_pwd' as never);
+
+      await customAuthService.register({
+        email: 'async-user@example.com',
+        username: 'asyncuser',
+        password: 'password123',
+      });
+
+      expect(mockJobsProducer.sendVerificationEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: mockUser.email,
+          username: mockUser.username,
+          token: expect.any(String),
+        }),
+      );
+    });
+
     it('should throw ConflictException if email is already in use', async () => {
       mockUsersService.findByEmail.mockResolvedValue(mockUser);
 

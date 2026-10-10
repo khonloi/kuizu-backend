@@ -4,12 +4,15 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
+  Optional,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
+import { JobsProducerService } from '../jobs/jobs-producer.service';
 import {
   RegisterDto,
   LoginDto,
@@ -22,10 +25,13 @@ import {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Optional() private readonly jobsProducerService?: JobsProducerService,
   ) {}
 
   async register(
@@ -77,6 +83,20 @@ export class AuthService {
       expiresAt,
       createdAt: new Date(),
     });
+
+    if (this.jobsProducerService) {
+      void this.jobsProducerService
+        .sendVerificationEmail({
+          to: user.email,
+          username: user.username,
+          token: verificationToken,
+        })
+        .catch((err: Error) =>
+          this.logger.error(
+            `Failed to enqueue verification email: ${err.message}`,
+          ),
+        );
+    }
 
     return {
       user: {
@@ -315,6 +335,20 @@ export class AuthService {
       expires,
     );
 
+    if (this.jobsProducerService) {
+      void this.jobsProducerService
+        .sendVerificationEmail({
+          to: user.email,
+          username: user.username,
+          token: verificationToken,
+        })
+        .catch((err: Error) =>
+          this.logger.error(
+            `Failed to enqueue verification email: ${err.message}`,
+          ),
+        );
+    }
+
     return {
       success: true,
       message: 'Verification link has been sent.',
@@ -340,6 +374,20 @@ export class AuthService {
       hashedToken,
       expires,
     );
+
+    if (this.jobsProducerService) {
+      void this.jobsProducerService
+        .sendPasswordResetEmail({
+          to: user.email,
+          username: user.username,
+          token: resetToken,
+        })
+        .catch((err: Error) =>
+          this.logger.error(
+            `Failed to enqueue password reset email: ${err.message}`,
+          ),
+        );
+    }
 
     return {
       success: true,

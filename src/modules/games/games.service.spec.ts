@@ -167,6 +167,45 @@ describe('GamesService', () => {
       );
     });
 
+    it('should delegate game session persistence to JobsProducerService when provided', async () => {
+      const mockJobsProducer = {
+        saveGameSessionReport: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const customService = new GamesService(
+        mockGameStateStore,
+        mockQuizzesService as unknown as QuizzesService,
+        mockJwtService as unknown as JwtService,
+        mockGameSessionRepository as unknown as GameSessionRepository,
+        mockJobsProducer as any,
+      );
+
+      const quizId = new Types.ObjectId().toString();
+      (mockQuizzesService.findOne as any).mockResolvedValue({
+        _id: quizId,
+        title: 'Async Quiz',
+        questions: [{ questionText: 'Q1', choices: [] }],
+      });
+
+      const session = mockGameStateStore.createSession(
+        'host-async',
+        quizId,
+        'Async Quiz',
+        [{ questionText: 'Q1', choices: [] }],
+        'host-u1',
+      );
+      await customService.finishGame(session);
+
+      expect(mockJobsProducer.saveGameSessionReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pin: session.pin,
+          quizId,
+          quizTitle: 'Async Quiz',
+          hostUserId: 'host-u1',
+        }),
+      );
+    });
+
     it('should return failure if host session not found for start or reveal', () => {
       const startRes = service.startGame('unknown-host');
       expect(startRes.success).toBe(false);

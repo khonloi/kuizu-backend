@@ -5,6 +5,7 @@ import { GamesService } from './games.service';
 import { GameStateStore } from './game-state.store';
 import { QuizzesModule } from '../quizzes/quizzes.module';
 import { AuthModule } from '../auth/auth.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { GameSession, GameSessionSchema } from './schemas/game-session.schema';
 import { GameSessionRepository } from './repositories';
 
@@ -12,6 +13,7 @@ import { GameSessionRepository } from './repositories';
   imports: [
     QuizzesModule,
     AuthModule,
+    JobsModule,
     MongooseModule.forFeature([
       { name: GameSession.name, schema: GameSessionSchema },
     ]),

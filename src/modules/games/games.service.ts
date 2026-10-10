@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import {
@@ -9,6 +9,7 @@ import {
 import { QuizzesService } from '../quizzes/quizzes.service';
 import { QuizChoice } from '../quizzes/schemas/quiz.schema';
 import { GameSessionRepository } from './repositories';
+import { JobsProducerService } from '../jobs/jobs-producer.service';
 
 export interface LeaderboardEntry {
   socketId: string;
@@ -92,6 +93,7 @@ export class GamesService {
     private readonly quizzesService: QuizzesService,
     private readonly jwtService: JwtService,
     private readonly gameSessionRepository: GameSessionRepository,
+    @Optional() private readonly jobsProducerService?: JobsProducerService,
   ) {}
 
   authenticateToken(rawToken?: string): any {
@@ -284,32 +286,54 @@ export class GamesService {
     const finalLeaderboard = this.gameStateStore.getLeaderboard(session.pin);
     const podium = finalLeaderboard.slice(0, 3);
 
-    void this.quizzesService
-      .incrementPlayCount(session.quizId)
-      .catch(() => null);
+    const players = finalLeaderboard.map((p, idx) => ({
+      nickname: p.nickname,
+      score: p.score,
+      rank: idx + 1,
+    }));
 
-    try {
-      const hostObjectId =
-        session.hostUserId && Types.ObjectId.isValid(session.hostUserId)
-          ? new Types.ObjectId(session.hostUserId)
-          : null;
-
-      if (Types.ObjectId.isValid(session.quizId)) {
-        await this.gameSessionRepository.create({
+    if (this.jobsProducerService) {
+      void this.jobsProducerService
+        .saveGameSessionReport({
           pin: session.pin,
-          host: hostObjectId,
-          quiz: new Types.ObjectId(session.quizId),
+          hostUserId: session.hostUserId,
+          quizId: session.quizId,
           quizTitle: session.quizTitle,
-          players: finalLeaderboard.map((p, idx) => ({
-            nickname: p.nickname,
-            score: p.score,
-            rank: idx + 1,
-          })),
-          status: 'completed',
-        });
+          players,
+        })
+        .catch((err: Error) =>
+          this.logger.error(
+            `Failed to enqueue game session report: ${err.message}`,
+          ),
+        );
+    } else {
+      void this.quizzesService
+        .incrementPlayCount(session.quizId)
+        .catch(() => null);
+
+      try {
+        const hostObjectId =
+          session.hostUserId && Types.ObjectId.isValid(session.hostUserId)
+            ? new Types.ObjectId(session.hostUserId)
+            : null;
+
+        if (Types.ObjectId.isValid(session.quizId)) {
+          void this.gameSessionRepository
+            .create({
+              pin: session.pin,
+              host: hostObjectId,
+              quiz: new Types.ObjectId(session.quizId),
+              quizTitle: session.quizTitle,
+              players,
+              status: 'completed',
+            })
+            .catch((err: Error) =>
+              this.logger.error('Failed to save game session history', err),
+            );
+        }
+      } catch (err: any) {
+        this.logger.error('Failed to save game session history', err);
       }
-    } catch (err) {
-      this.logger.error('Failed to save game session history', err);
     }
 
     return {

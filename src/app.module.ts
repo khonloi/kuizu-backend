@@ -24,6 +24,7 @@ import { CoursesModule } from './modules/courses/courses.module';
 import { QuizzesModule } from './modules/quizzes/quizzes.module';
 import { GamesModule } from './modules/games/games.module';
 import { DatabaseModule } from './database/database.module';
+import { JobsModule } from './modules/jobs/jobs.module';
 
 @Module({
   imports: [
@@ -128,6 +129,7 @@ import { DatabaseModule } from './database/database.module';
     QuizzesModule,
     GamesModule,
     DatabaseModule,
+    JobsModule,
   ],
   providers: [
     {
