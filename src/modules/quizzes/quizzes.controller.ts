@@ -7,7 +7,9 @@ import {
   Body,
   Param,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import {
   ApiTags,
   ApiOperation,
@@ -32,6 +34,8 @@ export class QuizzesController {
   constructor(private readonly quizzesService: QuizzesService) {}
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(30000)
   @Get()
   @ApiOperation({ summary: 'List public quizzes' })
   async findAll(@Query('author') authorId?: string) {
@@ -54,6 +58,8 @@ export class QuizzesController {
   }
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(30000)
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific quiz by ID' })
   async findOne(@Param('id') id: string) {

@@ -7,7 +7,10 @@ import {
   Post,
   Body,
   Res,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+
 import {
   ApiTags,
   ApiOperation,
@@ -84,6 +87,9 @@ export class UsersController {
   }
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('users:leaderboard')
+  @CacheTTL(30000)
   @ApiOperation({ summary: 'Get public global leaderboard' })
   @Get('leaderboard')
   async getLeaderboard() {

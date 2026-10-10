@@ -9,16 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Types } from 'mongoose';
-import {
-  GameStateStore,
-  PlayerState,
-  LiveGameSession,
-} from './game-state.store';
-import { QuizzesService } from '../quizzes/quizzes.service';
-import { QuizChoice } from '../quizzes/schemas/quiz.schema';
-import { GameSessionRepository } from './repositories';
+import { GamesService } from './games.service';
 
 @WebSocketGateway({
   cors: {
@@ -32,41 +23,33 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(GamesGateway.name);
 
-  constructor(
-    private readonly gameStateStore: GameStateStore,
-    private readonly quizzesService: QuizzesService,
-    private readonly jwtService: JwtService,
-    private readonly gameSessionRepository: GameSessionRepository,
-  ) {}
+  constructor(private readonly gamesService: GamesService) {}
 
   handleConnection(client: Socket) {
-    try {
-      const authHeader =
-        (client.handshake.auth?.token as string) ||
-        (client.handshake.headers?.authorization as string);
+    const rawToken =
+      (client.handshake.auth?.token as string) ||
+      (client.handshake.headers?.authorization as string);
 
-      if (authHeader) {
-        const token = authHeader.startsWith('Bearer ')
-          ? authHeader.slice(7).trim()
-          : authHeader;
-        const payload = this.jwtService.verify(token);
-        client.data.user = payload;
+    const user = this.gamesService.authenticateToken(rawToken);
+    if (user) {
+      client.data.user = user;
+      this.logger.log(
+        `Socket authenticated: ${client.id} (user: ${user.username || user.sub})`,
+      );
+    } else {
+      if (rawToken) {
         this.logger.log(
-          `Socket authenticated: ${client.id} (user: ${payload.username || payload.sub})`,
+          `Socket connected with invalid/expired token: ${client.id}`,
         );
       } else {
         this.logger.log(`Socket connected as guest: ${client.id}`);
       }
-    } catch {
-      this.logger.log(
-        `Socket connected with invalid/expired token: ${client.id}`,
-      );
     }
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Socket disconnected: ${client.id}`);
-    const result = this.gameStateStore.removeSocket(client.id);
+    const result = this.gamesService.handleDisconnect(client.id);
     if (result.pin) {
       if (result.wasHost) {
         this.server.to(`game:${result.pin}`).emit('game:cancelled', {
@@ -87,33 +70,19 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { quizId: string },
   ) {
     try {
-      const quiz = await this.quizzesService.findOne(data.quizId);
-      if (!quiz.questions || quiz.questions.length === 0) {
-        return { success: false, message: 'Quiz has no questions' };
-      }
-
       const hostUserId = client.data?.user?.id || client.data?.user?.sub;
-
-      const session = this.gameStateStore.createSession(
+      const res = await this.gamesService.createGameSession(
         client.id,
-        quiz._id.toString(),
-        quiz.title,
-        quiz.questions,
+        data.quizId,
         hostUserId,
       );
 
-      void client.join(`host:${session.pin}`);
-      void client.join(`game:${session.pin}`);
-
-      this.logger.log(
-        `Host created game session PIN: ${session.pin} for quiz: ${quiz.title}`,
-      );
+      void client.join(`host:${res.pin}`);
+      void client.join(`game:${res.pin}`);
 
       return {
         success: true,
-        pin: session.pin,
-        quizTitle: quiz.title,
-        totalQuestions: quiz.questions.length,
+        ...res,
       };
     } catch (err) {
       return { success: false, message: (err as Error).message };
@@ -125,86 +94,57 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { pin: string; nickname: string },
   ) {
-    const { pin, nickname } = data;
-    const result = this.gameStateStore.addPlayer(pin, client.id, nickname);
+    const res = this.gamesService.joinGame(data.pin, client.id, data.nickname);
 
-    if (!result.success) {
-      return result;
+    if (!res.success) {
+      return res;
     }
 
-    void client.join(`game:${pin}`);
+    void client.join(`game:${data.pin}`);
 
-    const session = this.gameStateStore.getSession(pin)!;
-
-    this.server.to(`host:${pin}`).emit('player:joined', {
-      nickname: result.player!.nickname,
+    this.server.to(`host:${data.pin}`).emit('player:joined', {
+      nickname: res.nickname,
       socketId: client.id,
-      playerCount: session.players.size,
+      playerCount: res.playerCount,
     });
 
     return {
       success: true,
-      pin,
-      nickname: result.player!.nickname,
-      quizTitle: session.quizTitle,
-      totalQuestions: session.questions.length,
+      pin: res.pin,
+      nickname: res.nickname,
+      quizTitle: res.quizTitle,
+      totalQuestions: res.totalQuestions,
     };
   }
 
   @SubscribeMessage('host:start')
   handleHostStart(@ConnectedSocket() client: Socket) {
-    const session = this.gameStateStore.getSessionByHost(client.id);
-    if (!session) {
-      return { success: false, message: 'Session not found for host' };
+    const res = this.gamesService.startGame(client.id);
+    if (!res.success) {
+      return res;
     }
 
-    return this.sendQuestion(session, 0);
+    this.server.to(`game:${res.pin}`).emit('question:start', res.payload);
+    return { success: true, questionIndex: res.questionIndex };
   }
 
   @SubscribeMessage('host:next')
   async handleHostNext(@ConnectedSocket() client: Socket) {
-    const session = this.gameStateStore.getSessionByHost(client.id);
-    if (!session) {
-      return { success: false, message: 'Session not found for host' };
+    const res = await this.gamesService.nextQuestionOrFinish(client.id);
+    if (!res.success) {
+      return res;
     }
 
-    const nextIndex = session.currentQuestionIndex + 1;
-    if (nextIndex >= session.questions.length) {
-      return this.finishGame(session);
+    if (res.isFinished) {
+      this.server.to(`game:${res.pin}`).emit('game:ended', {
+        podium: res.podium,
+        fullLeaderboard: res.finalLeaderboard,
+      });
+      return { success: true, podium: res.podium };
     }
 
-    return this.sendQuestion(session, nextIndex);
-  }
-
-  private sendQuestion(session: LiveGameSession, questionIndex: number) {
-    session.currentQuestionIndex = questionIndex;
-    session.state = 'question';
-    session.questionStartTime = Date.now();
-
-    for (const player of session.players.values()) {
-      player.answeredCurrent = false;
-      player.lastAnswerScore = 0;
-    }
-
-    const question = session.questions[questionIndex];
-
-    const playerChoices = question.choices.map((c: QuizChoice) => ({
-      id: c.id,
-      text: c.text,
-      color: c.color,
-    }));
-
-    this.server.to(`game:${session.pin}`).emit('question:start', {
-      questionIndex,
-      totalQuestions: session.questions.length,
-      questionText: question.questionText,
-      timeLimit: question.timeLimit,
-      points: question.points,
-      mediaUrl: question.mediaUrl,
-      choices: playerChoices,
-    });
-
-    return { success: true, questionIndex };
+    this.server.to(`game:${res.pin}`).emit('question:start', res.payload);
+    return { success: true, questionIndex: res.questionIndex };
   }
 
   @SubscribeMessage('player:answer')
@@ -212,88 +152,30 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { pin: string; choiceId: string },
   ) {
-    const { pin, choiceId } = data;
-    const result = this.gameStateStore.recordAnswer(pin, client.id, choiceId);
+    const res = this.gamesService.recordAnswer(
+      data.pin,
+      client.id,
+      data.choiceId,
+    );
 
-    if (result.success) {
-      const session = this.gameStateStore.getSession(pin);
-      if (session) {
-        const answeredCount = Array.from(session.players.values()).filter(
-          (p: PlayerState) => p.answeredCurrent,
-        ).length;
-
-        this.server.to(`host:${pin}`).emit('question:answer_count', {
-          answeredCount,
-          totalPlayers: session.players.size,
-        });
-      }
+    if (res.success && res.totalPlayers > 0) {
+      this.server.to(`host:${data.pin}`).emit('question:answer_count', {
+        answeredCount: res.answeredCount,
+        totalPlayers: res.totalPlayers,
+      });
     }
 
-    return result;
+    return res;
   }
 
   @SubscribeMessage('host:reveal')
   handleHostReveal(@ConnectedSocket() client: Socket) {
-    const session = this.gameStateStore.getSessionByHost(client.id);
-    if (!session || session.state !== 'question') {
-      return { success: false, message: 'Invalid state for reveal' };
+    const res = this.gamesService.revealQuestion(client.id);
+    if (!res.success) {
+      return res;
     }
 
-    session.state = 'reveal';
-    const currentQuestion = session.questions[session.currentQuestionIndex];
-    const correctChoice = currentQuestion.choices.find(
-      (c: QuizChoice) => c.isCorrect,
-    );
-
-    const leaderboard = this.gameStateStore.getLeaderboard(session.pin);
-
-    this.server.to(`game:${session.pin}`).emit('question:reveal', {
-      correctChoiceId: correctChoice?.id,
-      correctChoiceText: correctChoice?.text,
-      leaderboard: leaderboard.slice(0, 5),
-    });
-
+    this.server.to(`game:${res.pin}`).emit('question:reveal', res.payload);
     return { success: true };
-  }
-
-  private async finishGame(session: LiveGameSession) {
-    session.state = 'ended';
-    const finalLeaderboard = this.gameStateStore.getLeaderboard(session.pin);
-    const podium = finalLeaderboard.slice(0, 3);
-
-    void this.quizzesService
-      .incrementPlayCount(session.quizId)
-      .catch(() => null);
-
-    try {
-      const hostObjectId =
-        session.hostUserId && Types.ObjectId.isValid(session.hostUserId)
-          ? new Types.ObjectId(session.hostUserId)
-          : null;
-
-      if (Types.ObjectId.isValid(session.quizId)) {
-        await this.gameSessionRepository.create({
-          pin: session.pin,
-          host: hostObjectId,
-          quiz: new Types.ObjectId(session.quizId),
-          quizTitle: session.quizTitle,
-          players: finalLeaderboard.map((p, idx) => ({
-            nickname: p.nickname,
-            score: p.score,
-            rank: idx + 1,
-          })),
-          status: 'completed',
-        });
-      }
-    } catch (err) {
-      this.logger.error('Failed to save game session history', err);
-    }
-
-    this.server.to(`game:${session.pin}`).emit('game:ended', {
-      podium,
-      fullLeaderboard: finalLeaderboard,
-    });
-
-    return { success: true, podium };
   }
 }

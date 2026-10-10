@@ -7,7 +7,10 @@ import {
   Param,
   Body,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
+
 import {
   ApiTags,
   ApiOperation,
@@ -33,6 +36,9 @@ export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheKey('courses:published')
+  @CacheTTL(60000)
   @Get()
   @ApiOperation({ summary: 'List all published courses' })
   async getCourses() {
@@ -84,6 +90,8 @@ export class CoursesController {
   }
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(60000)
   @Get(':slug')
   @ApiOperation({ summary: 'Get course curriculum by slug' })
   async getCourseBySlug(@Param('slug') slug: string) {
@@ -103,6 +111,8 @@ export class CoursesController {
   }
 
   @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(60000)
   @Get(':slug/lessons/:lessonId')
   @ApiOperation({
     summary: 'Get lesson exercises by course slug and lesson ID',

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
@@ -81,6 +82,10 @@ import { DatabaseModule } from './database/database.module';
         limit: 120,
       },
     ]),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 30000,
+    }),
     HealthModule,
     AuthModule,
     UsersModule,

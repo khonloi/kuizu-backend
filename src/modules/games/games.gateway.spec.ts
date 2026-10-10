@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Types } from 'mongoose';
 import { GamesGateway } from './games.gateway';
+import { GamesService } from './games.service';
 import { GameStateStore } from './game-state.store';
 import { QuizzesService } from '../quizzes/quizzes.service';
 
 describe('GamesGateway', () => {
   let gateway: GamesGateway;
+  let gamesService: GamesService;
   let mockGameStateStore: GameStateStore;
   let mockQuizzesService: QuizzesService;
   let mockJwtService: any;
@@ -33,12 +35,14 @@ describe('GamesGateway', () => {
       }),
     };
 
-    gateway = new GamesGateway(
+    gamesService = new GamesService(
       mockGameStateStore,
       mockQuizzesService,
       mockJwtService,
       mockGameSessionRepository,
     );
+
+    gateway = new GamesGateway(gamesService);
     gateway.server = mockServer;
   });
 

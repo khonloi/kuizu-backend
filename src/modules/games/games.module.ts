@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { GamesGateway } from './games.gateway';
+import { GamesService } from './games.service';
 import { GameStateStore } from './game-state.store';
 import { QuizzesModule } from '../quizzes/quizzes.module';
 import { AuthModule } from '../auth/auth.module';
@@ -15,7 +16,12 @@ import { GameSessionRepository } from './repositories';
       { name: GameSession.name, schema: GameSessionSchema },
     ]),
   ],
-  providers: [GamesGateway, GameStateStore, GameSessionRepository],
-  exports: [GamesGateway, GameStateStore, GameSessionRepository],
+  providers: [
+    GamesGateway,
+    GamesService,
+    GameStateStore,
+    GameSessionRepository,
+  ],
+  exports: [GamesGateway, GamesService, GameStateStore, GameSessionRepository],
 })
 export class GamesModule {}
