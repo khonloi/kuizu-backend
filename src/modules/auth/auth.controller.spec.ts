@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AuthController } from './auth.controller';
+import { BadRequestException } from '@nestjs/common';
+import { AuthController, AUTH_COOKIE_PATH } from './auth.controller';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -149,7 +150,7 @@ describe('AuthController', () => {
 
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token', {
-        path: '/api/auth/refresh',
+        path: AUTH_COOKIE_PATH,
       });
       expect(mockAuthService.logout).toHaveBeenCalledWith(
         'u1',
@@ -202,6 +203,14 @@ describe('AuthController', () => {
       expect(mockAuthService.revokeOtherSessions).toHaveBeenCalledWith(
         'u1',
         'active_token',
+      );
+    });
+
+    it('revokeSessions should throw BadRequestException if all !== true and no token present', async () => {
+      const req: any = { cookies: {} };
+
+      await expect(controller.revokeSessions('u1', req)).rejects.toThrow(
+        BadRequestException,
       );
     });
   });

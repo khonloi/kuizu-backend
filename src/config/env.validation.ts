@@ -29,9 +29,24 @@ export const envSchema = z
       .string()
       .optional()
       .describe('Redis connection string for scaling & cache'),
+    EXPOSE_DEV_TOKENS: z
+      .enum(['true', 'false'])
+      .optional()
+      .default('false')
+      .describe(
+        'Expose raw verification/reset tokens in responses for local development',
+      ),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production') {
+      if (data.EXPOSE_DEV_TOKENS === 'true') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['EXPOSE_DEV_TOKENS'],
+          message: 'EXPOSE_DEV_TOKENS cannot be true in production mode.',
+        });
+      }
+
       const isDefaultAccess =
         !data.JWT_ACCESS_SECRET ||
         data.JWT_ACCESS_SECRET === INSECURE_DEFAULT_ACCESS_SECRET ||

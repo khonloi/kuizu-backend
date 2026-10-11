@@ -26,12 +26,15 @@ describe('QuestionsController', () => {
 
     const res = await controller.findAll('author-1', 'tag-1', 'query', 'easy');
     expect(res).toBe(mockQuestions);
-    expect(spy).toHaveBeenCalledWith({
-      authorId: 'author-1',
-      tag: 'tag-1',
-      search: 'query',
-      difficulty: 'easy',
-    });
+    expect(spy).toHaveBeenCalledWith(
+      {
+        authorId: 'author-1',
+        tag: 'tag-1',
+        search: 'query',
+        difficulty: 'easy',
+      },
+      undefined,
+    );
   });
 
   it('findMyQuestions should delegate to service.findAll with current userId', async () => {
@@ -42,7 +45,10 @@ describe('QuestionsController', () => {
 
     const res = await controller.findMyQuestions('user-123');
     expect(res).toBe(mockQuestions);
-    expect(spy).toHaveBeenCalledWith({ authorId: 'user-123' });
+    expect(spy).toHaveBeenCalledWith(
+      { authorId: 'user-123' },
+      { id: 'user-123', role: 'user' },
+    );
   });
 
   it('findOne should delegate to service.findOne', async () => {
@@ -53,7 +59,7 @@ describe('QuestionsController', () => {
 
     const res = await controller.findOne('q-123');
     expect(res).toBe(mockQuestion);
-    expect(spy).toHaveBeenCalledWith('q-123');
+    expect(spy).toHaveBeenCalledWith('q-123', undefined);
   });
 
   it('create should delegate to service.create with userId and dto', async () => {

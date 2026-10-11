@@ -112,17 +112,21 @@ describe('CoursesController', () => {
     expect(spy).toHaveBeenCalledWith('user-123', 'french-1');
   });
 
-  it('completeLesson should delegate to service.completeLesson with default or custom xp', async () => {
-    const expected = { success: true, xpEarned: 20, progress: {} as any };
+  it('completeLesson should delegate to service.completeLesson', async () => {
+    const expected = {
+      success: true,
+      xpEarned: 20,
+      alreadyCompleted: false,
+      progress: {} as any,
+    };
     const spy = vi.spyOn(service, 'completeLesson').mockResolvedValue(expected);
 
     const res = await controller.completeLesson(
       'french-1',
       'lesson-1',
       'user-123',
-      20,
     );
     expect(res).toBe(expected);
-    expect(spy).toHaveBeenCalledWith('user-123', 'french-1', 'lesson-1', 20);
+    expect(spy).toHaveBeenCalledWith('user-123', 'french-1', 'lesson-1');
   });
 });

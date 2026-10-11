@@ -11,6 +11,7 @@ import { Keyv } from 'keyv';
 
 import { validateEnv } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { RedisModule } from './common/redis/redis.module';
@@ -67,9 +68,14 @@ import { JobsModule } from './modules/jobs/jobs.module';
             genReqId: (req, res) => {
               const existing =
                 req.headers['x-request-id'] || req.headers['x-correlation-id'];
+              const headerVal = Array.isArray(existing)
+                ? existing[0]
+                : existing;
               const id =
-                (Array.isArray(existing) ? existing[0] : existing) ||
-                randomUUID();
+                typeof headerVal === 'string' &&
+                /^[a-zA-Z0-9_-]{1,64}$/.test(headerVal)
+                  ? headerVal
+                  : randomUUID();
               req.headers['x-request-id'] = id;
               req.headers['x-correlation-id'] = id;
               res.setHeader('X-Request-Id', id);
@@ -142,6 +148,10 @@ import { JobsModule } from './modules/jobs/jobs.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,

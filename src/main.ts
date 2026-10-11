@@ -11,6 +11,9 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', 1);
+
   const logger = app.get(Logger);
   app.useLogger(logger);
 
@@ -72,23 +75,28 @@ async function bootstrap() {
   // Enable graceful shutdown
   app.enableShutdownHooks();
 
-  // Swagger Documentation
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Kuizu API')
-    .setDescription(
-      'Full-stack gamified learning & multiplayer quiz engine (Duolingo + Kahoot clone)',
-    )
-    .setVersion('2.0.0')
-    .addBearerAuth()
-    .addCookieAuth('access_token')
-    .build();
+  // Swagger Documentation (only in non-production or when explicitly enabled)
+  const isProd = configService.get<string>('NODE_ENV') === 'production';
+  const enableSwagger = configService.get<string>('ENABLE_SWAGGER') === 'true';
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+  if (!isProd || enableSwagger) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Kuizu API')
+      .setDescription(
+        'Full-stack gamified learning & multiplayer quiz engine (Duolingo + Kahoot clone)',
+      )
+      .setVersion('2.0.0')
+      .addBearerAuth()
+      .addCookieAuth('access_token')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+  }
 
   // Attach distributed Redis WebSocket adapter if REDIS_URI is present
   const redisUri = configService.get<string>('REDIS_URI');
@@ -104,10 +112,12 @@ async function bootstrap() {
   logger.log(
     `🚀 Kuizu Backend API running at: http://localhost:${port}/api/v1`,
   );
-  logger.log(
-    `📖 Swagger API Docs accessible at: http://localhost:${port}/api/docs`,
-  );
-  logger.log(`🎮 Socket.IO Gateway listening on namespace: /game`);
+  if (!isProd || enableSwagger) {
+    logger.log(
+      `📖 Swagger API Docs accessible at: http://localhost:${port}/api/docs`,
+    );
+  }
+  logger.log(`🎮 Socket.IO Gateway active`);
 }
 
 void bootstrap();

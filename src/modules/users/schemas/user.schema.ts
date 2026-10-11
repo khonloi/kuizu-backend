@@ -42,7 +42,7 @@ export class User {
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
-  @Prop({ required: true, unique: true, trim: true })
+  @Prop({ required: true, trim: true })
   username: string;
 
   @Prop({ required: true })
@@ -101,6 +101,10 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+UserSchema.index(
+  { username: 1 },
+  { unique: true, collation: { locale: 'en', strength: 2 } },
+);
 UserSchema.index({ xp: -1 });
 UserSchema.index({ emailVerificationToken: 1 }, { sparse: true });
 UserSchema.index({ passwordResetToken: 1 }, { sparse: true });

@@ -32,6 +32,7 @@ describe('QuizzesService', () => {
         _id: new Types.ObjectId(),
         ...dto,
       })),
+      findByIdWithDetails: vi.fn(),
     };
 
     service = new QuizzesService(
@@ -51,9 +52,46 @@ describe('QuizzesService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw NotFoundException if a referenced question does not exist', async () => {
+      const authorId = new Types.ObjectId().toString();
+      const questionId = new Types.ObjectId().toString();
+
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(null);
+
+      await expect(
+        service.create(authorId, {
+          title: 'Quiz 1',
+          questionIds: [questionId],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if a referenced question belongs to another author', async () => {
+      const authorId = new Types.ObjectId().toString();
+      const otherAuthorId = new Types.ObjectId().toString();
+      const questionId = new Types.ObjectId().toString();
+
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue({
+        _id: questionId,
+        author: { _id: otherAuthorId },
+      });
+
+      await expect(
+        service.create(authorId, {
+          title: 'Quiz 1',
+          questionIds: [questionId],
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
     it('should create a quiz with existing questionIds and return populated quiz', async () => {
       const authorId = new Types.ObjectId().toString();
       const questionId = new Types.ObjectId().toString();
+
+      mockQuestionRepository.findByIdWithDetails.mockResolvedValue({
+        _id: questionId,
+        author: { _id: authorId },
+      });
 
       const mockPopulatedQuiz = {
         _id: new Types.ObjectId(),
@@ -135,7 +173,7 @@ describe('QuizzesService', () => {
 
       const res = await service.findAllAdmin();
       expect(mockQuizRepository.findWithDetails).toHaveBeenCalledWith({});
-      expect(res.length).toBe(2);
+      expect((res as any).length).toBe(2);
     });
 
     it('should delegate to findPaginatedWithDetails when pagination query is provided to findAll', async () => {
@@ -167,7 +205,7 @@ describe('QuizzesService', () => {
         { isPublic: true },
         query,
       );
-      expect(res).toBe(mockPaginated);
+      expect(res).toEqual(mockPaginated);
     });
 
     it('should delegate to findPaginatedWithDetails when pagination query is provided to findAllAdmin', async () => {
@@ -214,11 +252,69 @@ describe('QuizzesService', () => {
 
     it('should return quiz if found', async () => {
       const validId = new Types.ObjectId().toString();
-      const mockQuiz = { _id: validId, title: 'Found Quiz' };
+      const mockQuiz = { _id: validId, title: 'Found Quiz', isPublic: true };
       mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
 
       const res = await service.findOne(validId);
       expect(res).toEqual(mockQuiz);
+    });
+
+    it('should throw NotFoundException if private quiz is requested by stranger', async () => {
+      const validId = new Types.ObjectId().toString();
+      const authorId = new Types.ObjectId().toString();
+      const strangerId = new Types.ObjectId().toString();
+      const mockQuiz = {
+        _id: validId,
+        title: 'Private Quiz',
+        isPublic: false,
+        author: { _id: new Types.ObjectId(authorId) },
+      };
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
+
+      await expect(
+        service.findOne(validId, { id: strangerId, role: 'user' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should allow author to access private quiz', async () => {
+      const validId = new Types.ObjectId().toString();
+      const authorId = new Types.ObjectId().toString();
+      const mockQuiz = {
+        _id: validId,
+        title: 'Private Quiz',
+        isPublic: false,
+        author: { _id: new Types.ObjectId(authorId) },
+      };
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
+
+      const res = await service.findOne(validId, {
+        id: authorId,
+        role: 'user',
+      });
+      expect(res).toEqual(mockQuiz);
+    });
+
+    it('should sanitize choices when sanitize=true for public learner', async () => {
+      const validId = new Types.ObjectId().toString();
+      const mockQuiz = {
+        _id: validId,
+        title: 'Public Quiz',
+        isPublic: true,
+        questions: [
+          {
+            questionText: 'What is 1+1?',
+            choices: [
+              { id: 'c1', text: '2', isCorrect: true },
+              { id: 'c2', text: '3', isCorrect: false },
+            ],
+          },
+        ],
+      };
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
+
+      const res = (await service.findOne(validId, undefined, true)) as any;
+      expect(res.questions[0].choices[0].isCorrect).toBeUndefined();
+      expect(res.questions[0].choices[0].text).toBe('2');
     });
   });
 
@@ -231,6 +327,7 @@ describe('QuizzesService', () => {
       const mockQuiz = {
         _id: id,
         author: { _id: new Types.ObjectId(authorId) },
+        isPublic: true,
       };
 
       mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
@@ -248,6 +345,7 @@ describe('QuizzesService', () => {
         _id: id,
         author: { _id: new Types.ObjectId(authorId) },
         title: 'Original Title',
+        isPublic: true,
         save: vi.fn().mockResolvedValue(true),
       };
 
@@ -274,6 +372,7 @@ describe('QuizzesService', () => {
       const mockQuiz = {
         _id: id,
         author: { _id: new Types.ObjectId(authorId) },
+        isPublic: true,
       };
 
       mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
@@ -290,6 +389,7 @@ describe('QuizzesService', () => {
       const mockQuiz = {
         _id: id,
         author: { _id: new Types.ObjectId(authorId) },
+        isPublic: true,
       };
 
       mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);

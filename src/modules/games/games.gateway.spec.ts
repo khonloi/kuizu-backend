@@ -105,7 +105,9 @@ describe('GamesGateway', () => {
         questions: [{ id: 'q1', choices: [] }],
       } as any);
 
-      const res = await gateway.handleHostCreate(mockClient, { quizId });
+      const res = (await gateway.handleHostCreate(mockClient, {
+        quizId,
+      })) as any;
       expect(res.success).toBe(true);
       expect(res.quizTitle).toBe('Valid Quiz');
       expect(mockClient.join).toHaveBeenCalledWith(`host:${res.pin}`);
@@ -139,7 +141,9 @@ describe('GamesGateway', () => {
         ],
       } as any);
 
-      const createRes = await gateway.handleHostCreate(hostClient, { quizId });
+      const createRes = (await gateway.handleHostCreate(hostClient, {
+        quizId,
+      })) as any;
       const pin = createRes.pin!;
 
       const playerClient: any = {
@@ -177,6 +181,36 @@ describe('GamesGateway', () => {
       expect(nextRes.success).toBe(true);
       expect(session.state).toBe('ended');
       expect(mockGameSessionRepository.create).toHaveBeenCalled();
+
+      // Subsequent host:next should fail safely since game already ended
+      const endedNextRes = (await gateway.handleHostNext(hostClient)) as any;
+      expect(endedNextRes.success).toBe(false);
+      expect(endedNextRes.message).toBe('Game has already ended');
+    });
+
+    it('should reject invalid join payloads', () => {
+      const playerClient: any = { id: 'p-bad', join: vi.fn() };
+      const res = gateway.handlePlayerJoin(playerClient, {
+        pin: 'invalid-pin',
+        nickname: '',
+      });
+      expect(res.success).toBe(false);
+    });
+
+    it('should throttle player after 5 failed join attempts', () => {
+      const playerClient: any = { id: 'p-spammer', join: vi.fn() };
+      for (let i = 0; i < 5; i++) {
+        gateway.handlePlayerJoin(playerClient, {
+          pin: '999999',
+          nickname: 'Attacker',
+        });
+      }
+      const throttledRes = gateway.handlePlayerJoin(playerClient, {
+        pin: '999999',
+        nickname: 'Attacker',
+      });
+      expect(throttledRes.success).toBe(false);
+      expect(throttledRes.message).toContain('Too many failed join attempts');
     });
   });
 });

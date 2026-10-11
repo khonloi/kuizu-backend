@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { User, UserDocument } from '../modules/users/schemas/user.schema';
@@ -8,6 +9,10 @@ import {
   CourseDocument,
 } from '../modules/courses/schemas/course.schema';
 import { Quiz, QuizDocument } from '../modules/quizzes/schemas/quiz.schema';
+import {
+  Question,
+  QuestionDocument,
+} from '../modules/quizzes/schemas/question.schema';
 
 @Injectable()
 export class SeedService implements OnApplicationBootstrap {
@@ -18,6 +23,9 @@ export class SeedService implements OnApplicationBootstrap {
     @InjectModel(Course.name)
     private readonly courseModel: Model<CourseDocument>,
     @InjectModel(Quiz.name) private readonly quizModel: Model<QuizDocument>,
+    @InjectModel(Question.name)
+    private readonly questionModel: Model<QuestionDocument>,
+    private readonly configService: ConfigService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -29,6 +37,16 @@ export class SeedService implements OnApplicationBootstrap {
   }
 
   async seedDefaults() {
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+    const forceSeed = this.configService.get<string>('SEED_DEMO') === 'true';
+
+    if (isProduction && !forceSeed) {
+      this.logger.log(
+        'Production environment detected. Skipping demo data seeding.',
+      );
+      return;
+    }
     let demoUser = await this.userModel.findOne({ email: 'demo@kuizu.dev' });
     if (!demoUser) {
       const passwordHash = await bcrypt.hash('kuizu123', 12);
@@ -107,6 +125,34 @@ export class SeedService implements OnApplicationBootstrap {
       title: 'Web Tech & Pop Culture Quiz',
     });
     if (!existingQuiz && demoUser) {
+      const q1 = await this.questionModel.create({
+        questionText: 'Which runtime was created by Ryan Dahl after Node.js?',
+        type: 'multiple-choice',
+        timeLimit: 20,
+        points: 1000,
+        author: demoUser._id,
+        choices: [
+          { id: 'c1', text: 'Bun', isCorrect: false, color: 'red' },
+          { id: 'c2', text: 'Deno', isCorrect: true, color: 'blue' },
+          { id: 'c3', text: 'Electron', isCorrect: false, color: 'yellow' },
+          { id: 'c4', text: 'V8 Direct', isCorrect: false, color: 'green' },
+        ],
+      });
+
+      const q2 = await this.questionModel.create({
+        questionText: 'What does the "M" stand for in MERN stack?',
+        type: 'multiple-choice',
+        timeLimit: 15,
+        points: 1000,
+        author: demoUser._id,
+        choices: [
+          { id: 'c5', text: 'MySQL', isCorrect: false, color: 'red' },
+          { id: 'c6', text: 'MongoDB', isCorrect: true, color: 'blue' },
+          { id: 'c7', text: 'MariaDB', isCorrect: false, color: 'yellow' },
+          { id: 'c8', text: 'Memcached', isCorrect: false, color: 'green' },
+        ],
+      });
+
       await this.quizModel.create({
         title: 'Web Tech & Pop Culture Quiz',
         description:
@@ -116,35 +162,7 @@ export class SeedService implements OnApplicationBootstrap {
         author: demoUser._id,
         isPublic: true,
         playCount: 12,
-        questions: [
-          {
-            id: 'q1',
-            questionText:
-              'Which runtime was created by Ryan Dahl after Node.js?',
-            type: 'multiple-choice',
-            timeLimit: 20,
-            points: 1000,
-            choices: [
-              { id: 'c1', text: 'Bun', isCorrect: false, color: 'red' },
-              { id: 'c2', text: 'Deno', isCorrect: true, color: 'blue' },
-              { id: 'c3', text: 'Electron', isCorrect: false, color: 'yellow' },
-              { id: 'c4', text: 'V8 Direct', isCorrect: false, color: 'green' },
-            ],
-          },
-          {
-            id: 'q2',
-            questionText: 'What does the "M" stand for in MERN stack?',
-            type: 'multiple-choice',
-            timeLimit: 15,
-            points: 1000,
-            choices: [
-              { id: 'c5', text: 'MySQL', isCorrect: false, color: 'red' },
-              { id: 'c6', text: 'MongoDB', isCorrect: true, color: 'blue' },
-              { id: 'c7', text: 'MariaDB', isCorrect: false, color: 'yellow' },
-              { id: 'c8', text: 'Memcached', isCorrect: false, color: 'green' },
-            ],
-          },
-        ],
+        questions: [q1._id, q2._id],
       });
       this.logger.log('Sample Kahoot-style quiz seeded');
     }

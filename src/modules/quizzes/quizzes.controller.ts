@@ -8,8 +8,15 @@ import {
   Param,
   Query,
   UseInterceptors,
+  Inject,
+  Optional,
 } from '@nestjs/common';
-import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
+import {
+  CacheInterceptor,
+  CacheTTL,
+  CACHE_MANAGER,
+  Cache,
+} from '@nestjs/cache-manager';
 import {
   ApiTags,
   ApiOperation,
@@ -32,7 +39,10 @@ import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
 @ApiTags('Quizzes')
 @Controller('quizzes')
 export class QuizzesController {
-  constructor(private readonly quizzesService: QuizzesService) {}
+  constructor(
+    private readonly quizzesService: QuizzesService,
+    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
+  ) {}
 
   @Public()
   @UseInterceptors(CacheInterceptor)
@@ -100,12 +110,10 @@ export class QuizzesController {
   }
 
   @Public()
-  @UseInterceptors(CacheInterceptor)
-  @CacheTTL(30000)
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific quiz by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.quizzesService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.quizzesService.findOne(id, user, true);
   }
 
   @ApiBearerAuth()
@@ -116,7 +124,9 @@ export class QuizzesController {
     @CurrentUser('id') userId: string,
     @Body(new ZodValidationPipe(createQuizSchema)) dto: CreateQuizDto,
   ) {
-    return this.quizzesService.create(userId, dto);
+    const result = await this.quizzesService.create(userId, dto);
+    await this.cacheManager?.clear();
+    return result;
   }
 
   @ApiBearerAuth()
@@ -129,7 +139,9 @@ export class QuizzesController {
     @Body(new ZodValidationPipe(updateQuizSchema)) dto: UpdateQuizDto,
   ) {
     const isAdmin = userRole === 'admin';
-    return this.quizzesService.update(id, userId, dto, isAdmin);
+    const result = await this.quizzesService.update(id, userId, dto, isAdmin);
+    await this.cacheManager?.clear();
+    return result;
   }
 
   @ApiBearerAuth()
@@ -141,6 +153,8 @@ export class QuizzesController {
     @CurrentUser('role') userRole: string,
   ) {
     const isAdmin = userRole === 'admin';
-    return this.quizzesService.delete(id, userId, isAdmin);
+    const result = await this.quizzesService.delete(id, userId, isAdmin);
+    await this.cacheManager?.clear();
+    return result;
   }
 }

@@ -25,12 +25,22 @@ import { GamificationProcessor } from './processors/gamification.processor';
         if (redisUri) {
           try {
             const parsed = new URL(redisUri);
+            const isTls = parsed.protocol === 'rediss:';
+            const dbIndex = parsed.pathname
+              ? parseInt(parsed.pathname.slice(1), 10)
+              : undefined;
             return {
               connection: {
+                url: redisUri,
                 host: parsed.hostname || '127.0.0.1',
                 port: parseInt(parsed.port || '6379', 10),
                 username: parsed.username || undefined,
                 password: parsed.password || undefined,
+                db:
+                  typeof dbIndex === 'number' && !Number.isNaN(dbIndex)
+                    ? dbIndex
+                    : undefined,
+                tls: isTls ? {} : undefined,
                 lazyConnect: true,
                 maxRetriesPerRequest: null,
               },

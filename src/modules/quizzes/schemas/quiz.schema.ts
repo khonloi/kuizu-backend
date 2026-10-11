@@ -39,7 +39,7 @@ export class Quiz {
   playCount: number;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Question' }], default: [] })
-  questions: Question[];
+  questions: (Types.ObjectId | Question)[];
 }
 
 export const QuizSchema = SchemaFactory.createForClass(Quiz);

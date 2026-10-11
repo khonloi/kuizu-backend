@@ -58,7 +58,7 @@ describe('AuthService', () => {
       resetPassword: vi.fn(),
       addSession: vi.fn(),
       removeSession: vi.fn(),
-      rotateSession: vi.fn(),
+      rotateSession: vi.fn().mockResolvedValue({ _id: 'user-123' }),
       removeAllSessions: vi.fn(),
       removeAllOtherSessions: vi.fn(),
       getSessions: vi.fn(),
@@ -100,7 +100,7 @@ describe('AuthService', () => {
 
       expect(result.user.email).toBe('test@example.com');
       expect(result.user.isEmailVerified).toBe(false);
-      expect(result.verificationToken).toBeDefined();
+      expect(result.verificationToken).toBeUndefined();
       expect(result.accessToken).toBe('mock_jwt_token');
       expect(result.refreshToken).toBe('mock_jwt_token');
       expect(mockUsersService.create).toHaveBeenCalledWith(
@@ -231,6 +231,7 @@ describe('AuthService', () => {
         ...mockUser,
         isActive: false,
       });
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
 
       await expect(
         service.login({
@@ -490,7 +491,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
       });
       expect(result.success).toBe(true);
-      expect(result.verificationToken).toBeDefined();
+      expect(result.verificationToken).toBeUndefined();
       expect(mockUsersService.setEmailVerificationToken).toHaveBeenCalledWith(
         'user-123',
         expect.any(String),
@@ -533,7 +534,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
       });
       expect(result.success).toBe(true);
-      expect(result.resetToken).toBeDefined();
+      expect(result.resetToken).toBeUndefined();
       expect(mockUsersService.setPasswordResetToken).toHaveBeenCalledWith(
         'user-123',
         expect.any(String),
@@ -550,6 +551,22 @@ describe('AuthService', () => {
       expect(result.success).toBe(true);
       expect(result.message).toContain('If an account exists with that email');
       expect(mockUsersService.setPasswordResetToken).not.toHaveBeenCalled();
+    });
+
+    it('should expose reset token in dev when EXPOSE_DEV_TOKENS is explicitly enabled', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(mockUser);
+      mockUsersService.setPasswordResetToken.mockResolvedValue(mockUser);
+      mockConfigService.get.mockImplementation((key: string) => {
+        if (key === 'NODE_ENV') return 'development';
+        if (key === 'EXPOSE_DEV_TOKENS') return 'true';
+        return null;
+      });
+
+      const result = await service.forgotPassword({
+        email: 'test@example.com',
+      });
+      expect(result.success).toBe(true);
+      expect(result.resetToken).toBeDefined();
     });
   });
 

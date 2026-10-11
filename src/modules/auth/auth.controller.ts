@@ -8,6 +8,7 @@ import {
   Delete,
   Param,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -40,6 +41,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from '../users/users.service';
 
+export const AUTH_COOKIE_PATH = '/api/v1/auth';
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -62,13 +65,13 @@ export class AuthController {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
-      path: '/api/auth/refresh',
+      path: AUTH_COOKIE_PATH,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User successfully registered' })
@@ -87,7 +90,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @ApiOperation({ summary: 'Log in with email/username and password' })
   @ApiResponse({ status: 200, description: 'Login successful' })
@@ -106,6 +109,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('refresh')
   @ApiOperation({
     summary: 'Refresh access token using refresh cookie or body',
@@ -136,7 +140,7 @@ export class AuthController {
   ) {
     const token = req.cookies?.refresh_token || bodyToken;
     res.clearCookie('access_token');
-    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+    res.clearCookie('refresh_token', { path: AUTH_COOKIE_PATH });
     return this.authService.logout(userId, token);
   }
 
@@ -171,7 +175,9 @@ export class AuthController {
     }
     const token = req.cookies?.refresh_token;
     if (!token) {
-      return this.authService.revokeAllSessions(userId);
+      throw new BadRequestException(
+        'Refresh token is required to revoke other sessions. Use ?all=true to revoke all sessions.',
+      );
     }
     return this.authService.revokeOtherSessions(userId, token);
   }
@@ -206,7 +212,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('resend-verification')
   @ApiOperation({ summary: 'Resend email verification token' })
   @ApiResponse({ status: 200, description: 'Verification email sent' })
@@ -218,7 +224,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset token via email' })
   @ApiResponse({ status: 200, description: 'Reset password link processed' })

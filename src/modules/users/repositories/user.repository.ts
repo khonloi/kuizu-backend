@@ -19,7 +19,13 @@ export class UserRepository extends BaseRepository<UserDocument> {
   }
 
   async findByUsername(username: string): Promise<UserDocument | null> {
-    return this.findOne({ username });
+    const query = this.model.findOne({ username });
+    if (typeof (query as any)?.collation === 'function') {
+      return this.executeQuery(
+        (query as any).collation({ locale: 'en', strength: 2 }),
+      );
+    }
+    return this.executeQuery(query);
   }
 
   async findByVerificationToken(token: string): Promise<UserDocument | null> {
@@ -140,39 +146,51 @@ export class UserRepository extends BaseRepository<UserDocument> {
     userId: string,
     cost: number,
   ): Promise<UserDocument | null> {
-    return this.findByIdAndUpdate(
-      userId,
+    return this.findOneAndUpdate(
+      {
+        _id: userId,
+        gems: { $gte: cost },
+        hearts: { $lt: 5 },
+      },
       {
         $set: { hearts: 5 },
         $inc: { gems: -cost },
       },
-      { new: true },
+      { new: true, runValidators: true },
     );
   }
 
   async consumeHeart(userId: string): Promise<UserDocument | null> {
-    return this.findByIdAndUpdate(
-      userId,
+    return this.findOneAndUpdate(
+      {
+        _id: userId,
+        hearts: { $gt: 0 },
+      },
       {
         $inc: { hearts: -1 },
       },
-      { new: true },
+      { new: true, runValidators: true },
     );
   }
 
   async buyStreakFreeze(
     userId: string,
     cost: number,
+    maxFreezes = 2,
   ): Promise<UserDocument | null> {
-    return this.findByIdAndUpdate(
-      userId,
+    return this.findOneAndUpdate(
+      {
+        _id: userId,
+        gems: { $gte: cost },
+        streakFreezes: { $lt: maxFreezes },
+      },
       {
         $inc: {
           streakFreezes: 1,
           gems: -cost,
         },
       },
-      { new: true },
+      { new: true, runValidators: true },
     );
   }
 
@@ -186,7 +204,13 @@ export class UserRepository extends BaseRepository<UserDocument> {
 
   async getLeaderboard(limit = 20): Promise<UserDocument[]> {
     return this.executeQuery(
-      this.model.find({}, { passwordHash: 0 }).sort({ xp: -1 }).limit(limit),
+      this.model
+        .find(
+          { isActive: true },
+          { username: 1, avatarUrl: 1, xp: 1, streak: 1, league: 1 },
+        )
+        .sort({ xp: -1 })
+        .limit(limit),
     );
   }
 
@@ -201,6 +225,7 @@ export class UserRepository extends BaseRepository<UserDocument> {
           passwordHash: 0,
           emailVerificationToken: 0,
           passwordResetToken: 0,
+          'sessions.tokenHash': 0,
         })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -213,7 +238,14 @@ export class UserRepository extends BaseRepository<UserDocument> {
   }
 
   async findAdminUserById(id: string): Promise<UserDocument | null> {
-    return this.executeQuery(this.model.findById(id, { passwordHash: 0 }));
+    return this.executeQuery(
+      this.model.findById(id, {
+        passwordHash: 0,
+        emailVerificationToken: 0,
+        passwordResetToken: 0,
+        'sessions.tokenHash': 0,
+      }),
+    );
   }
 
   async updateUserRole(id: string, role: string): Promise<UserDocument | null> {
@@ -271,18 +303,18 @@ export class UserRepository extends BaseRepository<UserDocument> {
     oldSessionId: string,
     newSession: SessionInfo,
   ): Promise<UserDocument | null> {
-    const updated = await this.findByIdAndUpdate(
-      userId,
+    return this.findOneAndUpdate(
       {
-        $pull: {
-          sessions: { sessionId: oldSessionId },
+        _id: userId,
+        'sessions.sessionId': oldSessionId,
+      },
+      {
+        $set: {
+          'sessions.$': newSession,
         },
       },
       { new: true },
     );
-
-    if (!updated) return null;
-    return this.addSession(userId, newSession);
   }
 
   async clearAllSessions(userId: string): Promise<UserDocument | null> {

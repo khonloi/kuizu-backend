@@ -101,6 +101,6 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Public user profile' })
   @Get(':id')
   async getUserProfile(@Param('id') id: string) {
-    return this.usersService.getProfile(id);
+    return this.usersService.getPublicProfile(id);
   }
 }

@@ -9,7 +9,7 @@ describe('HealthController', () => {
   let mockHealthCheckService: Partial<HealthCheckService>;
   let mockMongooseHealth: Partial<MongooseHealthIndicator>;
   let mockRedisHealth: Partial<RedisHealthIndicator>;
-  let mockConnection: Partial<Connection>;
+  let mockConnection: any;
 
   beforeEach(() => {
     mockHealthCheckService = {

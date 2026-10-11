@@ -10,6 +10,7 @@ export interface JwtPayload {
   email: string;
   username: string;
   role: string;
+  sid?: string;
 }
 
 @Injectable()
@@ -18,6 +19,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
   ) {
+    const accessSecret =
+      configService.get<string>('JWT_ACCESS_SECRET') ||
+      'kuizu_super_secret_access_key_2026';
+
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: Request) => {
@@ -35,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_ACCESS_SECRET') || 'kuizu_super_secret_access_key_2026',
+      secretOrKey: accessSecret,
     });
   }
 
@@ -44,11 +49,28 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!user) {
       throw new UnauthorizedException('User account no longer exists');
     }
+    if (user.isActive === false) {
+      throw new UnauthorizedException('User account has been deactivated');
+    }
+
+    if (payload.sid && user.sessions?.length) {
+      const activeSession = user.sessions.find(
+        (s) => s.sessionId === payload.sid,
+      );
+      if (!activeSession) {
+        throw new UnauthorizedException('Session has been revoked');
+      }
+      if (activeSession.expiresAt && activeSession.expiresAt < new Date()) {
+        throw new UnauthorizedException('Session has expired');
+      }
+    }
+
     return {
       id: user._id.toString(),
       email: user.email,
       username: user.username,
       role: user.role,
+      sid: payload.sid,
     };
   }
 }

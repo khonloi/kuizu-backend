@@ -1,7 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 export const exerciseSchema = z.object({
-  id: z.string().default(() => Math.random().toString(36).substring(2, 9)),
+  id: z.string().default(() => randomBytes(4).toString('hex')),
   type: z
     .enum([
       'multiple-choice',
@@ -18,7 +19,7 @@ export const exerciseSchema = z.object({
 });
 
 export const lessonSchema = z.object({
-  id: z.string().default(() => Math.random().toString(36).substring(2, 9)),
+  id: z.string().default(() => randomBytes(4).toString('hex')),
   title: z.string().min(1, 'Lesson title is required'),
   icon: z.string().optional().default('star'),
   order: z.number().int().positive().optional().default(1),
@@ -27,7 +28,7 @@ export const lessonSchema = z.object({
 });
 
 export const unitSchema = z.object({
-  id: z.string().default(() => Math.random().toString(36).substring(2, 9)),
+  id: z.string().default(() => randomBytes(4).toString('hex')),
   title: z.string().min(1, 'Unit title is required'),
   description: z.string().optional().default(''),
   color: z
@@ -55,10 +56,25 @@ export const createCourseSchema = z.object({
   units: z.array(unitSchema).default([]),
 });
 
-export const updateCourseSchema = createCourseSchema.partial();
+export const updateCourseSchema = z.object({
+  title: z.string().min(1, 'Course title cannot be empty').max(100).optional(),
+  slug: z
+    .string()
+    .min(2, 'Slug must be at least 2 characters')
+    .max(100)
+    .regex(
+      /^[a-z0-9-]+$/,
+      'Slug can only contain lowercase letters, numbers, and hyphens',
+    )
+    .optional(),
+  description: z.string().max(1000).optional(),
+  icon: z.string().optional(),
+  isPublished: z.boolean().optional(),
+  units: z.array(unitSchema).optional(),
+});
 
 export type ExerciseDto = z.input<typeof exerciseSchema>;
 export type LessonDto = z.input<typeof lessonSchema>;
 export type UnitDto = z.input<typeof unitSchema>;
 export type CreateCourseDto = z.input<typeof createCourseSchema>;
-export type UpdateCourseDto = z.input<typeof updateCourseSchema>;
+export type UpdateCourseDto = z.infer<typeof updateCourseSchema>;

@@ -22,7 +22,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    const status =
+    let status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -33,6 +33,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message = 'Internal server error';
     let errors: unknown = undefined;
 
+    if (exception && typeof exception === 'object') {
+      const err = exception as Record<string, unknown>;
+      if (err.name === 'CastError') {
+        status = HttpStatus.BAD_REQUEST;
+        message = `Invalid ID format for path '${(err.path as string) || 'id'}': ${String(err.value)}`;
+      } else if (err.code === 11000) {
+        status = HttpStatus.CONFLICT;
+        message = 'A resource with this unique identifier already exists';
+      }
+    }
+
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
     } else if (
@@ -42,7 +53,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const respObj = exceptionResponse as Record<string, unknown>;
       message = (respObj.message as string) || message;
       errors = respObj.errors;
-    } else if (exception instanceof Error) {
+    } else if (
+      exception instanceof Error &&
+      status === HttpStatus.INTERNAL_SERVER_ERROR
+    ) {
       message = exception.message;
     }
 

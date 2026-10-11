@@ -57,6 +57,12 @@ export class GamificationProcessor extends WorkerHost {
     let demotedCount = 0;
     let totalEvaluated = 0;
 
+    const plannedUpdates: {
+      userId: string;
+      newLeague: LeagueTier;
+      type: 'promote' | 'demote';
+    }[] = [];
+
     for (let i = 0; i < LEAGUE_TIERS.length; i++) {
       const currentTier = LEAGUE_TIERS[i];
       const nextTier = LEAGUE_TIERS[i + 1] as LeagueTier | undefined;
@@ -84,10 +90,11 @@ export class GamificationProcessor extends WorkerHost {
         const toPromote = usersInTier.slice(0, promoteThreshold);
 
         for (const user of toPromote) {
-          await this.userRepository.findByIdAndUpdate(user._id.toString(), {
-            league: nextTier,
+          plannedUpdates.push({
+            userId: user._id.toString(),
+            newLeague: nextTier,
+            type: 'promote',
           });
-          promotedCount++;
         }
       }
 
@@ -102,11 +109,24 @@ export class GamificationProcessor extends WorkerHost {
         );
 
         for (const user of toDemote) {
-          await this.userRepository.findByIdAndUpdate(user._id.toString(), {
-            league: prevTier,
+          plannedUpdates.push({
+            userId: user._id.toString(),
+            newLeague: prevTier,
+            type: 'demote',
           });
-          demotedCount++;
         }
+      }
+    }
+
+    // Apply all tier updates in batch after evaluating all tiers
+    for (const update of plannedUpdates) {
+      await this.userRepository.findByIdAndUpdate(update.userId, {
+        league: update.newLeague,
+      });
+      if (update.type === 'promote') {
+        promotedCount++;
+      } else {
+        demotedCount++;
       }
     }
 

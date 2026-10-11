@@ -238,7 +238,7 @@ describe('GamificationService', () => {
         mockUser._id.toString(),
         20,
       );
-      expect(result.xp).toBe(170);
+      expect(result?.xp).toBe(170);
     });
   });
 

@@ -37,9 +37,12 @@ export class CoursesService {
     return this.courseRepository.findAllCoursesPaginated(query);
   }
 
-  async findBySlug(slug: string): Promise<CourseDocument> {
+  async findBySlug(
+    slug: string,
+    includeUnpublished = false,
+  ): Promise<CourseDocument> {
     const course = await this.courseRepository.findBySlug(slug);
-    if (!course) {
+    if (!course || (!includeUnpublished && course.isPublished === false)) {
       throw new NotFoundException(`Course '${slug}' not found`);
     }
     return course;
@@ -128,8 +131,23 @@ export class CoursesService {
     userId: string,
     courseSlug: string,
     lessonId: string,
-    xp = 15,
+    customXp?: number,
   ) {
+    const course = await this.findBySlug(courseSlug);
+    let targetLesson: Lesson | null = null;
+    for (const unit of course.units) {
+      const found = unit.lessons?.find((l: Lesson) => l.id === lessonId);
+      if (found) {
+        targetLesson = found;
+        break;
+      }
+    }
+    if (!targetLesson) {
+      throw new NotFoundException(
+        `Lesson '${lessonId}' not found in course '${courseSlug}'`,
+      );
+    }
+
     let progress = await this.progressRepository.findByUserAndCourse(
       userId,
       courseSlug,
@@ -145,18 +163,23 @@ export class CoursesService {
       });
     }
 
-    if (!progress.completedLessonIds.includes(lessonId)) {
-      progress.completedLessonIds.push(lessonId);
-      progress.totalXpEarned += xp;
-      await progress.save();
-    }
+    const isFirstCompletion = !progress.completedLessonIds.includes(lessonId);
+    const xpReward = customXp ?? targetLesson.xpReward ?? 15;
+    const xpToAward = isFirstCompletion ? xpReward : 0;
 
-    // Update user global XP
-    await this.gamificationService.addXp(userId, xp);
+    if (isFirstCompletion) {
+      progress.completedLessonIds.push(lessonId);
+      progress.totalXpEarned += xpToAward;
+      await progress.save();
+      if (xpToAward > 0) {
+        await this.gamificationService.addXp(userId, xpToAward);
+      }
+    }
 
     return {
       success: true,
-      xpEarned: xp,
+      xpEarned: xpToAward,
+      alreadyCompleted: !isFirstCompletion,
       progress,
     };
   }

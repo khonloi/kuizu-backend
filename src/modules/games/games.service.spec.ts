@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { GamesService } from './games.service';
 import { GameStateStore } from './game-state.store';
 import { QuizzesService } from '../quizzes/quizzes.service';
+import { JwtService } from '@nestjs/jwt';
+import { GameSessionRepository } from './repositories';
 
 describe('GamesService', () => {
   let service: GamesService;
@@ -135,12 +137,12 @@ describe('GamesService', () => {
       const pin = created.pin;
 
       // Join player
-      const joinRes = service.joinGame(pin, 'player-1', 'Alice');
+      const joinRes = service.joinGame(pin, 'player-1', 'Alice') as any;
       expect(joinRes.success).toBe(true);
       expect(joinRes.playerCount).toBe(1);
 
       // Start game
-      const startRes = service.startGame('host-1');
+      const startRes = service.startGame('host-1') as any;
       expect(startRes.success).toBe(true);
       expect(startRes.questionIndex).toBe(0);
       expect(startRes.payload?.questionText).toBe('1 + 1?');
@@ -152,12 +154,12 @@ describe('GamesService', () => {
       expect(ansRes.answeredCount).toBe(1);
 
       // Reveal
-      const revealRes = service.revealQuestion('host-1');
+      const revealRes = service.revealQuestion('host-1') as any;
       expect(revealRes.success).toBe(true);
       expect(revealRes.payload?.correctChoiceId).toBe('c1');
 
       // Next question finishes game
-      const nextRes = await service.nextQuestionOrFinish('host-1');
+      const nextRes = (await service.nextQuestionOrFinish('host-1')) as any;
       expect(nextRes.success).toBe(true);
       expect(nextRes.isFinished).toBe(true);
       expect(nextRes.podium).toBeDefined();
@@ -191,7 +193,7 @@ describe('GamesService', () => {
         'host-async',
         quizId,
         'Async Quiz',
-        [{ questionText: 'Q1', choices: [] }],
+        [{ questionText: 'Q1', choices: [] } as any],
         'host-u1',
       );
       await customService.finishGame(session);

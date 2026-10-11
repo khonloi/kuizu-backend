@@ -26,22 +26,38 @@ export class QuizzesService {
   ): Promise<Types.ObjectId[]> {
     const resolvedIds: Types.ObjectId[] = [];
 
+    const validateAndAddQuestionId = async (id: string) => {
+      if (!Types.ObjectId.isValid(id)) {
+        throw new BadRequestException(`Invalid question ID: ${id}`);
+      }
+      const existing = await this.questionRepository.findByIdWithDetails(id);
+      if (!existing) {
+        throw new NotFoundException(`Question not found: ${id}`);
+      }
+      const isOwner =
+        existing.author &&
+        ((existing.author as any)._id
+          ? String((existing.author as any)._id) === authorId
+          : String(existing.author) === authorId);
+
+      if (existing.author && !isOwner) {
+        throw new ForbiddenException(
+          `Cannot add question '${id}' owned by another user`,
+        );
+      }
+      resolvedIds.push(new Types.ObjectId(id));
+    };
+
     if (questionIds && questionIds.length > 0) {
       for (const id of questionIds) {
-        if (!Types.ObjectId.isValid(id)) {
-          throw new BadRequestException(`Invalid question ID: ${id}`);
-        }
-        resolvedIds.push(new Types.ObjectId(id));
+        await validateAndAddQuestionId(id);
       }
     }
 
     if (questions && questions.length > 0) {
       for (const item of questions) {
         if (typeof item === 'string') {
-          if (!Types.ObjectId.isValid(item)) {
-            throw new BadRequestException(`Invalid question ID: ${item}`);
-          }
-          resolvedIds.push(new Types.ObjectId(item));
+          await validateAndAddQuestionId(item);
         } else if (item && typeof item === 'object') {
           const savedQuestion = await this.questionRepository.create({
             ...item,
@@ -81,11 +97,34 @@ export class QuizzesService {
     return this.findOne(saved._id.toString());
   }
 
+  private sanitizeQuiz(quiz: any): any {
+    if (!quiz) return quiz;
+    const quizObj =
+      typeof quiz.toObject === 'function' ? quiz.toObject() : { ...quiz };
+    if (Array.isArray(quizObj.questions)) {
+      quizObj.questions = quizObj.questions.map((q: any) => {
+        const qObj =
+          typeof q?.toObject === 'function' ? q.toObject() : { ...q };
+        if (Array.isArray(qObj.choices)) {
+          qObj.choices = qObj.choices.map((c: any) => {
+            const { isCorrect: _isCorrect, ...rest } = c;
+            return rest;
+          });
+        }
+        return qObj;
+      });
+    }
+    return quizObj;
+  }
+
   async findAll(
     includePrivate = false,
     authorId?: string,
     query?: PaginationQueryInputDto,
-  ): Promise<PaginatedResponse<QuizDocument> | QuizDocument[]> {
+  ): Promise<
+    | PaginatedResponse<QuizDocument | Record<string, unknown>>
+    | (QuizDocument | Record<string, unknown>)[]
+  > {
     const filter: Record<string, unknown> = {};
     if (!includePrivate) {
       filter.isPublic = true;
@@ -95,10 +134,20 @@ export class QuizzesService {
         filter.author = new Types.ObjectId(authorId);
       }
     }
-    if (!query) {
-      return this.quizRepository.findWithDetails(filter);
+    const result = !query
+      ? await this.quizRepository.findWithDetails(filter)
+      : await this.quizRepository.findPaginatedWithDetails(filter, query);
+
+    if (!includePrivate) {
+      if (Array.isArray(result)) {
+        return result.map((q) => this.sanitizeQuiz(q));
+      }
+      return {
+        ...result,
+        data: result.data.map((q) => this.sanitizeQuiz(q)),
+      };
     }
-    return this.quizRepository.findPaginatedWithDetails(filter, query);
+    return result;
   }
 
   async findAllAdmin(
@@ -110,7 +159,21 @@ export class QuizzesService {
     return this.quizRepository.findPaginatedWithDetails({}, query);
   }
 
-  async findOne(id: string): Promise<QuizDocument> {
+  async findOne(
+    id: string,
+    requestingUser?: { id?: string; role?: string },
+    sanitize?: false,
+  ): Promise<QuizDocument>;
+  async findOne(
+    id: string,
+    requestingUser: { id?: string; role?: string } | undefined,
+    sanitize: true,
+  ): Promise<QuizDocument | Record<string, unknown>>;
+  async findOne(
+    id: string,
+    requestingUser?: { id?: string; role?: string },
+    sanitize = false,
+  ): Promise<QuizDocument | Record<string, unknown>> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Invalid quiz ID');
     }
@@ -118,6 +181,22 @@ export class QuizzesService {
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
+
+    const isAuthor =
+      requestingUser?.id &&
+      (quiz.author?._id
+        ? quiz.author._id.toString() === requestingUser.id
+        : quiz.author?.toString() === requestingUser.id);
+    const isAdmin = requestingUser?.role === 'admin';
+
+    if (quiz.isPublic === false && !isAuthor && !isAdmin) {
+      throw new NotFoundException('Quiz not found');
+    }
+
+    if (sanitize && !isAuthor && !isAdmin) {
+      return this.sanitizeQuiz(quiz);
+    }
+
     return quiz;
   }
 
@@ -127,12 +206,13 @@ export class QuizzesService {
     dto: UpdateQuizDto,
     isAdmin = false,
   ): Promise<QuizDocument> {
-    const quiz = await this.findOne(id);
+    const userContext = { id: authorId, role: isAdmin ? 'admin' : 'user' };
+    const quiz = await this.findOne(id, userContext);
     const authorMatches =
       quiz.author &&
-      (quiz.author._id
-        ? quiz.author._id.toString() === authorId
-        : quiz.author.toString() === authorId);
+      ((quiz.author as any)._id
+        ? String((quiz.author as any)._id) === authorId
+        : (quiz.author as any).toString() === authorId);
 
     if (!isAdmin && !authorMatches) {
       throw new ForbiddenException('Not authorized to update this quiz');
@@ -153,7 +233,7 @@ export class QuizzesService {
     }
 
     await quiz.save();
-    return this.findOne(id);
+    return this.findOne(id, userContext);
   }
 
   async delete(
@@ -161,15 +241,58 @@ export class QuizzesService {
     authorId: string,
     isAdmin = false,
   ): Promise<{ success: boolean }> {
-    const quiz = await this.findOne(id);
+    const userContext = { id: authorId, role: isAdmin ? 'admin' : 'user' };
+    const quiz = await this.findOne(id, userContext);
     const authorMatches =
       quiz.author &&
-      (quiz.author._id
-        ? quiz.author._id.toString() === authorId
-        : quiz.author.toString() === authorId);
+      ((quiz.author as any)._id
+        ? String((quiz.author as any)._id) === authorId
+        : (quiz.author as any).toString() === authorId);
 
     if (!isAdmin && !authorMatches) {
       throw new ForbiddenException('Not authorized to delete this quiz');
+    }
+
+    if (
+      quiz.questions &&
+      Array.isArray(quiz.questions) &&
+      quiz.questions.length > 0
+    ) {
+      const questionIds = quiz.questions.map((q: any) =>
+        q?._id ? q._id.toString() : q.toString(),
+      );
+      if (
+        typeof (this.quizRepository as any).find === 'function' &&
+        typeof (this.questionRepository as any).deleteMany === 'function'
+      ) {
+        const otherQuizzes = await this.quizRepository.find({
+          _id: { $ne: quiz._id },
+          questions: {
+            $in: questionIds
+              .filter((qid: string) => Types.ObjectId.isValid(qid))
+              .map((qid: string) => new Types.ObjectId(qid)),
+          },
+        });
+        const retainedSet = new Set<string>();
+        for (const oq of otherQuizzes) {
+          if (oq.questions) {
+            for (const q of oq.questions) {
+              const qIdStr = ((q as any)?._id ?? q)?.toString();
+              if (qIdStr) {
+                retainedSet.add(qIdStr);
+              }
+            }
+          }
+        }
+        const orphanedIds = questionIds.filter(
+          (qid: string) => !retainedSet.has(qid) && Types.ObjectId.isValid(qid),
+        );
+        if (orphanedIds.length > 0) {
+          await this.questionRepository.deleteMany({
+            _id: { $in: orphanedIds.map((qid) => new Types.ObjectId(qid)) },
+          });
+        }
+      }
     }
 
     await this.quizRepository.findByIdAndDelete(id);

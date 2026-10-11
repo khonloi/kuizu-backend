@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import { AdminUsersController } from './admin-users.controller';
 
 describe('AdminUsersController', () => {
@@ -48,25 +49,33 @@ describe('AdminUsersController', () => {
   });
 
   describe('updateUserRole', () => {
-    it('should call usersService.updateUserRole with id and role', async () => {
+    it('should call usersService.updateUserRole with id and role for another user', async () => {
       const updatedUser = { id: 'u1', role: 'teacher' };
       mockUsersService.updateUserRole.mockResolvedValue(updatedUser);
 
-      const result = await controller.updateUserRole('u1', { role: 'teacher' });
+      const result = await controller.updateUserRole('admin-1', 'u1', {
+        role: 'teacher',
+      });
       expect(result).toBe(updatedUser);
       expect(mockUsersService.updateUserRole).toHaveBeenCalledWith(
         'u1',
         'teacher',
       );
     });
+
+    it('should throw BadRequestException if admin attempts to modify their own role', async () => {
+      await expect(
+        controller.updateUserRole('admin-1', 'admin-1', { role: 'user' }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('updateUserStatus', () => {
-    it('should call usersService.updateUserStatus with id and isActive', async () => {
+    it('should call usersService.updateUserStatus with id and isActive for another user', async () => {
       const updatedUser = { id: 'u1', isActive: false };
       mockUsersService.updateUserStatus.mockResolvedValue(updatedUser);
 
-      const result = await controller.updateUserStatus('u1', {
+      const result = await controller.updateUserStatus('admin-1', 'u1', {
         isActive: false,
       });
       expect(result).toBe(updatedUser);
@@ -75,19 +84,31 @@ describe('AdminUsersController', () => {
         false,
       );
     });
+
+    it('should throw BadRequestException if admin attempts to change their own status', async () => {
+      await expect(
+        controller.updateUserStatus('admin-1', 'admin-1', { isActive: false }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('deleteUser', () => {
-    it('should call usersService.deleteAccount with id', async () => {
+    it('should call usersService.deleteAccount with id for another user', async () => {
       const deleteResult = {
         success: true,
         message: 'Account deleted successfully',
       };
       mockUsersService.deleteAccount.mockResolvedValue(deleteResult);
 
-      const result = await controller.deleteUser('u1');
+      const result = await controller.deleteUser('admin-1', 'u1');
       expect(result).toBe(deleteResult);
       expect(mockUsersService.deleteAccount).toHaveBeenCalledWith('u1');
+    });
+
+    it('should throw BadRequestException if admin attempts to delete their own account', async () => {
+      await expect(controller.deleteUser('admin-1', 'admin-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

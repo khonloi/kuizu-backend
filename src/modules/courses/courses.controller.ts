@@ -7,10 +7,16 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   UseInterceptors,
+  Inject,
+  Optional,
 } from '@nestjs/common';
-import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
+import {
+  CacheInterceptor,
+  CacheTTL,
+  CACHE_MANAGER,
+  Cache,
+} from '@nestjs/cache-manager';
 
 import {
   ApiTags,
@@ -22,7 +28,6 @@ import { CoursesService } from './courses.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { RolesGuard } from '../../common/guards/roles.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import {
   CreateCourseDto,
@@ -35,7 +40,10 @@ import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
 @ApiTags('Courses')
 @Controller('courses')
 export class CoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(
+    private readonly coursesService: CoursesService,
+    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
+  ) {}
 
   @Public()
   @UseInterceptors(CacheInterceptor)
@@ -60,7 +68,6 @@ export class CoursesController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(RolesGuard)
   @Roles('admin', 'teacher')
   @Get('admin/all')
   @ApiOperation({
@@ -84,7 +91,6 @@ export class CoursesController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(RolesGuard)
   @Roles('admin', 'teacher')
   @Post()
   @ApiOperation({ summary: 'Create a new course (Admin/Teacher only)' })
@@ -92,11 +98,12 @@ export class CoursesController {
   async createCourse(
     @Body(new ZodValidationPipe(createCourseSchema)) dto: CreateCourseDto,
   ) {
-    return this.coursesService.create(dto);
+    const result = await this.coursesService.create(dto);
+    await this.cacheManager?.clear();
+    return result;
   }
 
   @ApiBearerAuth()
-  @UseGuards(RolesGuard)
   @Roles('admin', 'teacher')
   @Put(':id')
   @ApiOperation({ summary: 'Update an existing course (Admin/Teacher only)' })
@@ -104,16 +111,19 @@ export class CoursesController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateCourseSchema)) dto: UpdateCourseDto,
   ) {
-    return this.coursesService.update(id, dto);
+    const result = await this.coursesService.update(id, dto);
+    await this.cacheManager?.clear();
+    return result;
   }
 
   @ApiBearerAuth()
-  @UseGuards(RolesGuard)
   @Roles('admin', 'teacher')
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a course (Admin/Teacher only)' })
   async deleteCourse(@Param('id') id: string) {
-    return this.coursesService.delete(id);
+    const result = await this.coursesService.delete(id);
+    await this.cacheManager?.clear();
+    return result;
   }
 
   @Public()
@@ -138,8 +148,6 @@ export class CoursesController {
   }
 
   @Public()
-  @UseInterceptors(CacheInterceptor)
-  @CacheTTL(60000)
   @Get(':slug/lessons/:lessonId')
   @ApiOperation({
     summary: 'Get lesson exercises by course slug and lesson ID',
@@ -168,8 +176,13 @@ export class CoursesController {
     @Param('slug') slug: string,
     @Param('lessonId') lessonId: string,
     @CurrentUser('id') userId: string,
-    @Body('xp') xp?: number,
   ) {
-    return this.coursesService.completeLesson(userId, slug, lessonId, xp || 15);
+    const result = await this.coursesService.completeLesson(
+      userId,
+      slug,
+      lessonId,
+    );
+    await this.cacheManager?.clear();
+    return result;
   }
 }

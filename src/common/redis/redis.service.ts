@@ -29,13 +29,13 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
         lazyConnect: true,
         maxRetriesPerRequest: 1,
         retryStrategy: (times) => {
-          if (times > 3) {
+          if (times > 20) {
             this.logger.warn(
-              'Redis reconnection failed after 3 attempts. Disabling Redis.',
+              'Redis reconnection failed after 20 attempts. Disabling Redis.',
             );
             return null;
           }
-          return Math.min(times * 500, 2000);
+          return Math.min(times * 1000, 10000);
         },
       });
 

@@ -10,7 +10,10 @@ export const registerSchema = z.object({
       /^[a-zA-Z0-9_]+$/,
       'Username can only contain letters, numbers, and underscores',
     ),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(72, 'Password cannot exceed 72 characters'),
 });
 
 export type RegisterDto = z.infer<typeof registerSchema>;
@@ -24,7 +27,10 @@ export type LoginDto = z.infer<typeof loginSchema>;
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  newPassword: z
+    .string()
+    .min(8, 'New password must be at least 8 characters')
+    .max(72, 'New password cannot exceed 72 characters'),
 });
 
 export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
@@ -49,7 +55,10 @@ export type ForgotPasswordDto = z.infer<typeof forgotPasswordSchema>;
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Reset token is required'),
-  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+  newPassword: z
+    .string()
+    .min(8, 'New password must be at least 8 characters')
+    .max(72, 'New password cannot exceed 72 characters'),
 });
 
 export type ResetPasswordDto = z.infer<typeof resetPasswordSchema>;

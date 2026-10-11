@@ -43,6 +43,7 @@ describe('UsersService', () => {
     });
     mockUserModel.findById = vi.fn();
     mockUserModel.findOne = vi.fn();
+    mockUserModel.findOneAndUpdate = vi.fn();
     mockUserModel.findByIdAndUpdate = vi.fn();
     mockUserModel.findByIdAndDelete = vi.fn();
     mockUserModel.find = vi.fn();
@@ -564,7 +565,7 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue({
         exec: vi.fn().mockResolvedValue(userLowHearts),
       });
-      mockUserModel.findByIdAndUpdate.mockReturnValue({
+      mockUserModel.findOneAndUpdate.mockReturnValue({
         exec: vi
           .fn()
           .mockResolvedValue({ ...userLowHearts, hearts: 5, gems: 50 }),
@@ -605,7 +606,7 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue({
         exec: vi.fn().mockResolvedValue(userWithHearts),
       });
-      mockUserModel.findByIdAndUpdate.mockReturnValue({
+      mockUserModel.findOneAndUpdate.mockReturnValue({
         exec: vi.fn().mockResolvedValue({ ...userWithHearts, hearts: 3 }),
       });
 
@@ -631,7 +632,7 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue({
         exec: vi.fn().mockResolvedValue(userEligible),
       });
-      mockUserModel.findByIdAndUpdate.mockReturnValue({
+      mockUserModel.findOneAndUpdate.mockReturnValue({
         exec: vi
           .fn()
           .mockResolvedValue({ ...userEligible, streakFreezes: 1, gems: 100 }),
@@ -816,18 +817,25 @@ describe('UsersService', () => {
         expiresAt: new Date(Date.now() + 10000),
         createdAt: new Date(),
       };
-      mockUserModel.findByIdAndUpdate
-        .mockReturnValueOnce({
-          exec: vi.fn().mockResolvedValue(mockUser),
-        })
-        .mockReturnValueOnce({
-          exec: vi
-            .fn()
-            .mockResolvedValue({ ...mockUser, sessions: [newSession] }),
-        });
+      mockUserModel.findOneAndUpdate.mockReturnValue({
+        exec: vi
+          .fn()
+          .mockResolvedValue({ ...mockUser, sessions: [newSession] }),
+      });
 
       await service.rotateSession(mockUser._id.toString(), 's1', newSession);
-      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalled();
+      expect(mockUserModel.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: mockUser._id.toString(),
+          'sessions.sessionId': 's1',
+        },
+        {
+          $set: {
+            'sessions.$': newSession,
+          },
+        },
+        { new: true },
+      );
     });
 
     it('should delegate removeAllSessions to userRepository', async () => {

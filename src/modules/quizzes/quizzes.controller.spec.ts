@@ -104,7 +104,7 @@ describe('QuizzesController', () => {
 
     const res = await controller.findOne('quiz-123');
     expect(res).toBe(mockQuiz);
-    expect(spy).toHaveBeenCalledWith('quiz-123');
+    expect(spy).toHaveBeenCalledWith('quiz-123', undefined, true);
   });
 
   it('create should delegate to service.create with userId and dto', async () => {

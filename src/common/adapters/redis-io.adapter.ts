@@ -13,13 +13,13 @@ export class RedisIoAdapter extends IoAdapter {
         lazyConnect: true,
         maxRetriesPerRequest: 1,
         retryStrategy: (times) => {
-          if (times > 3) {
+          if (times > 20) {
             this.redisLogger.warn(
               'Redis IoAdapter retry limit reached. Disabling Redis adapter.',
             );
             return null;
           }
-          return Math.min(times * 500, 2000);
+          return Math.min(times * 1000, 10000);
         },
       });
       const subClient = pubClient.duplicate();

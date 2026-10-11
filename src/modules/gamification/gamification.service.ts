@@ -82,10 +82,15 @@ export class GamificationService {
     }
 
     const updatedUser = await this.userRepository.refillHearts(userId, cost);
+    if (!updatedUser) {
+      throw new BadRequestException(
+        'Hearts could not be refilled (concurrent change or insufficient gems)',
+      );
+    }
 
     return {
-      hearts: updatedUser?.hearts ?? 5,
-      gems: updatedUser?.gems ?? 0,
+      hearts: updatedUser.hearts ?? 5,
+      gems: updatedUser.gems ?? 0,
       message: 'Hearts successfully refilled to maximum',
     };
   }
@@ -101,9 +106,12 @@ export class GamificationService {
     }
 
     const updatedUser = await this.userRepository.consumeHeart(userId);
+    if (!updatedUser) {
+      throw new BadRequestException('No hearts remaining');
+    }
 
     return {
-      hearts: updatedUser?.hearts ?? 0,
+      hearts: updatedUser.hearts ?? 0,
       message: 'Heart consumed',
     };
   }
@@ -123,11 +131,20 @@ export class GamificationService {
       throw new BadRequestException('Not enough gems to buy a streak freeze');
     }
 
-    const updatedUser = await this.userRepository.buyStreakFreeze(userId, cost);
+    const updatedUser = await this.userRepository.buyStreakFreeze(
+      userId,
+      cost,
+      maxFreezes,
+    );
+    if (!updatedUser) {
+      throw new BadRequestException(
+        'Streak freeze could not be purchased (concurrent change or limit reached)',
+      );
+    }
 
     return {
-      streakFreezes: updatedUser?.streakFreezes ?? 1,
-      gems: updatedUser?.gems ?? 0,
+      streakFreezes: updatedUser.streakFreezes ?? 1,
+      gems: updatedUser.gems ?? 0,
       message: 'Streak freeze purchased successfully',
     };
   }

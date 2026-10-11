@@ -2,18 +2,29 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument, SessionInfo } from './schemas/user.schema';
+import {
+  UserProgress,
+  UserProgressDocument,
+} from '../courses/schemas/user-progress.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
 import { createOffsetPaginatedResponse } from '../../common/dto';
+import { escapeRegex } from '../../common/utils/regex.util';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly gamificationService: GamificationService,
+    @Optional()
+    @InjectModel(UserProgress.name)
+    private readonly userProgressModel?: Model<UserProgressDocument>,
   ) {}
 
   async create(userData: Partial<User>): Promise<UserDocument> {
@@ -50,6 +61,24 @@ export class UsersService {
       streakFreezes: user.streakFreezes ?? 0,
       hearts: user.hearts,
       gems: user.gems,
+      league: user.league,
+    };
+  }
+
+  async getPublicProfile(userId: string) {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('User not found');
+    }
+    const user = await this.findById(userId);
+    if (!user || user.isActive === false) {
+      throw new NotFoundException('User not found');
+    }
+    return {
+      id: user._id,
+      username: user.username,
+      avatarUrl: user.avatarUrl,
+      xp: user.xp,
+      streak: user.streak,
       league: user.league,
     };
   }
@@ -149,6 +178,11 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    if (this.userProgressModel && Types.ObjectId.isValid(userId)) {
+      await this.userProgressModel.deleteMany({
+        user: new Types.ObjectId(userId),
+      });
+    }
     return { success: true, message: 'Account deleted successfully' };
   }
 
@@ -190,9 +224,10 @@ export class UsersService {
     }
 
     if (query.search) {
+      const escaped = escapeRegex(query.search.trim());
       filter.$or = [
-        { email: { $regex: query.search, $options: 'i' } },
-        { username: { $regex: query.search, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } },
+        { username: { $regex: escaped, $options: 'i' } },
       ];
     }
 
@@ -223,6 +258,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    await this.removeAllSessions(id);
     return user;
   }
 
@@ -233,6 +269,9 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    if (!isActive) {
+      await this.removeAllSessions(id);
+    }
     return user;
   }
 

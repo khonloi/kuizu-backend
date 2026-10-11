@@ -7,7 +7,11 @@ import {
   LiveGameSession,
 } from './game-state.store';
 import { QuizzesService } from '../quizzes/quizzes.service';
-import { QuizChoice } from '../quizzes/schemas/quiz.schema';
+import {
+  QuizChoice,
+  QuizDocument,
+  Question,
+} from '../quizzes/schemas/quiz.schema';
 import { GameSessionRepository } from './repositories';
 import { JobsProducerService } from '../jobs/jobs-producer.service';
 
@@ -117,16 +121,34 @@ export class GamesService {
     quizId: string,
     hostUserId?: string,
   ) {
-    const quiz = await this.quizzesService.findOne(quizId);
+    const quiz = (await this.quizzesService.findOne(quizId)) as QuizDocument;
     if (!quiz.questions || quiz.questions.length === 0) {
       throw new Error('Quiz has no questions');
+    }
+
+    const isAuthor =
+      hostUserId &&
+      (quiz.author?._id
+        ? quiz.author._id.toString() === hostUserId
+        : quiz.author?.toString() === hostUserId);
+
+    if (quiz.isPublic === false && !isAuthor) {
+      throw new Error('Only the author can host a private quiz');
+    }
+
+    const existingSession = this.gameStateStore.getSessionByHost(hostSocketId);
+    if (
+      existingSession &&
+      typeof (this.gameStateStore as any).removeSession === 'function'
+    ) {
+      this.gameStateStore.removeSession(existingSession.pin);
     }
 
     const session = this.gameStateStore.createSession(
       hostSocketId,
       quiz._id.toString(),
       quiz.title,
-      quiz.questions,
+      quiz.questions as unknown as Question[],
       hostUserId,
     );
 
@@ -178,6 +200,10 @@ export class GamesService {
     const session = this.gameStateStore.getSessionByHost(hostSocketId);
     if (!session) {
       return { success: false, message: 'Session not found for host' };
+    }
+
+    if (session.state === 'ended') {
+      return { success: false, message: 'Game has already ended' };
     }
 
     const nextIndex = session.currentQuestionIndex + 1;

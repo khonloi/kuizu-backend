@@ -241,6 +241,94 @@ describe('CoursesService', () => {
     });
   });
 
+  describe('completeLesson', () => {
+    it('should complete lesson, award lesson xpReward, and save progress on first completion', async () => {
+      const userId = new Types.ObjectId().toString();
+      const mockCourse = {
+        _id: new Types.ObjectId(),
+        title: 'Course 1',
+        slug: 'course-1',
+        units: [
+          {
+            id: 'u1',
+            lessons: [{ id: 'lesson-1', xpReward: 25 }],
+          },
+        ],
+      };
+      const mockProgress = {
+        completedLessonIds: [],
+        totalXpEarned: 0,
+        currentUnit: 1,
+        save: vi.fn().mockResolvedValue(true),
+      };
+
+      mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
+      mockProgressRepository.findByUserAndCourse.mockResolvedValue(
+        mockProgress,
+      );
+
+      const res = await service.completeLesson(userId, 'course-1', 'lesson-1');
+
+      expect(res.success).toBe(true);
+      expect(res.xpEarned).toBe(25);
+      expect(res.alreadyCompleted).toBe(false);
+      expect(mockProgress.completedLessonIds).toContain('lesson-1');
+      expect(mockProgress.totalXpEarned).toBe(25);
+      expect(mockProgress.save).toHaveBeenCalled();
+      expect(mockGamificationService.addXp).toHaveBeenCalledWith(userId, 25);
+    });
+
+    it('should not award XP again if lesson is already completed', async () => {
+      const userId = new Types.ObjectId().toString();
+      const mockCourse = {
+        _id: new Types.ObjectId(),
+        title: 'Course 1',
+        slug: 'course-1',
+        units: [
+          {
+            id: 'u1',
+            lessons: [{ id: 'lesson-1', xpReward: 25 }],
+          },
+        ],
+      };
+      const mockProgress = {
+        completedLessonIds: ['lesson-1'],
+        totalXpEarned: 25,
+        currentUnit: 1,
+        save: vi.fn().mockResolvedValue(true),
+      };
+
+      mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
+      mockProgressRepository.findByUserAndCourse.mockResolvedValue(
+        mockProgress,
+      );
+
+      const res = await service.completeLesson(userId, 'course-1', 'lesson-1');
+
+      expect(res.success).toBe(true);
+      expect(res.xpEarned).toBe(0);
+      expect(res.alreadyCompleted).toBe(true);
+      expect(mockProgress.save).not.toHaveBeenCalled();
+      expect(mockGamificationService.addXp).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if lesson does not exist in course', async () => {
+      const userId = new Types.ObjectId().toString();
+      const mockCourse = {
+        _id: new Types.ObjectId(),
+        title: 'Course 1',
+        slug: 'course-1',
+        units: [{ id: 'u1', lessons: [] }],
+      };
+
+      mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
+
+      await expect(
+        service.completeLesson(userId, 'course-1', 'nonexistent-lesson'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('getEnrichedCurriculum', () => {
     it('should return units with calculated isCompleted, isLocked, and isCurrent flags', async () => {
       const userId = new Types.ObjectId().toString();

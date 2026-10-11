@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomInt } from 'node:crypto';
 import { QuizChoice, QuizQuestion } from '../quizzes/schemas/quiz.schema';
 
 export interface PlayerState {
@@ -31,7 +32,7 @@ export class GameStateStore {
   generatePin(): string {
     let pin = '';
     do {
-      pin = Math.floor(100000 + Math.random() * 900000).toString();
+      pin = randomInt(100000, 1000000).toString();
     } while (this.sessions.has(pin));
     return pin;
   }
@@ -141,10 +142,23 @@ export class GameStateStore {
     );
     const isCorrect = !!selectedChoice?.isCorrect;
 
+    const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
+    const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
+
+    // If answer submitted after time limit plus 1s grace, reject with 0 points
+    if (session.questionStartTime > 0 && timeElapsed > timeLimitMs + 1000) {
+      player.answeredCurrent = true;
+      player.lastAnswerScore = 0;
+      return {
+        success: false,
+        isCorrect: false,
+        pointsEarned: 0,
+        newScore: player.score,
+      };
+    }
+
     let pointsEarned = 0;
     if (isCorrect) {
-      const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
-      const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
       const timeRemainingRatio = Math.max(
         0,
         (timeLimitMs - timeElapsed) / timeLimitMs,
@@ -209,5 +223,13 @@ export class GameStateStore {
     }
 
     return { wasHost: false };
+  }
+
+  removeSession(pin: string): void {
+    const session = this.sessions.get(pin);
+    if (session) {
+      this.hostToPin.delete(session.hostSocketId);
+      this.sessions.delete(pin);
+    }
   }
 }

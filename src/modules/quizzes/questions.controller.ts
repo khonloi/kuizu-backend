@@ -43,27 +43,34 @@ export class QuestionsController {
     @Query('tag') tag?: string,
     @Query('search') search?: string,
     @Query('difficulty') difficulty?: string,
+    @CurrentUser() user?: any,
   ) {
-    return this.questionsService.findAll({
-      authorId: author,
-      tag,
-      search,
-      difficulty,
-    });
+    return this.questionsService.findAll(
+      {
+        authorId: author,
+        tag,
+        search,
+        difficulty,
+      },
+      user,
+    );
   }
 
   @ApiBearerAuth()
   @Get('my')
   @ApiOperation({ summary: 'Get questions created by current user' })
   async findMyQuestions(@CurrentUser('id') userId: string) {
-    return this.questionsService.findAll({ authorId: userId });
+    return this.questionsService.findAll(
+      { authorId: userId },
+      { id: userId, role: 'user' },
+    );
   }
 
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific question by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.questionsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.questionsService.findOne(id, user);
   }
 
   @ApiBearerAuth()

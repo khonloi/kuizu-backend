@@ -9,6 +9,7 @@ describe('UsersController', () => {
   beforeEach(() => {
     mockUsersService = {
       getProfile: vi.fn(),
+      getPublicProfile: vi.fn(),
       updateProfile: vi.fn(),
       deleteAccount: vi.fn(),
       getLeaderboard: vi.fn(),
@@ -145,11 +146,11 @@ describe('UsersController', () => {
   describe('getUserProfile', () => {
     it('should return public profile by id', async () => {
       const mockProfile = { id: 'u2', username: 'bob' };
-      mockUsersService.getProfile.mockResolvedValue(mockProfile);
+      mockUsersService.getPublicProfile.mockResolvedValue(mockProfile);
 
       const result = await controller.getUserProfile('u2');
       expect(result).toBe(mockProfile);
-      expect(mockUsersService.getProfile).toHaveBeenCalledWith('u2');
+      expect(mockUsersService.getPublicProfile).toHaveBeenCalledWith('u2');
     });
   });
 });

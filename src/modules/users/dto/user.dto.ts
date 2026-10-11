@@ -12,6 +12,8 @@ export const updateProfileSchema = z.object({
     .optional(),
   avatarUrl: z
     .string()
+    .url('Avatar URL must be a valid URL')
+    .startsWith('http', 'Avatar URL must use http or https')
     .max(500, 'Avatar URL cannot exceed 500 characters')
     .optional(),
 });
@@ -23,7 +25,10 @@ export const adminQueryUsersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().optional(),
   role: z.enum(['user', 'teacher', 'admin']).optional(),
-  isActive: z.coerce.boolean().optional(),
+  isActive: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((val) => val === true || val === 'true')
+    .optional(),
 });
 
 export type AdminQueryUsersDto = z.infer<typeof adminQueryUsersSchema>;

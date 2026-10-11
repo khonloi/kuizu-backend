@@ -98,7 +98,7 @@ export class AuthService {
         );
     }
 
-    return {
+    const response: Record<string, any> = {
       user: {
         id: user._id,
         email: user.email,
@@ -112,9 +112,14 @@ export class AuthService {
         gems: user.gems,
         league: user.league,
       },
-      verificationToken,
       ...tokens,
     };
+
+    if (this.shouldExposeDevTokens()) {
+      response.verificationToken = verificationToken;
+    }
+
+    return response;
   }
 
   async login(
@@ -130,15 +135,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     if (user.isActive === false) {
       throw new UnauthorizedException(
         'Account has been suspended or deactivated',
       );
-    }
-
-    const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid credentials');
     }
 
     const tokens = this.generateTokens(
@@ -242,7 +247,7 @@ export class AuthService {
       const newTokenHash = this.hashToken(tokens.refreshToken);
       const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-      await this.usersService.rotateSession(userId, sessionId, {
+      const rotated = await this.usersService.rotateSession(userId, sessionId, {
         sessionId: newSessionId,
         tokenHash: newTokenHash,
         userAgent: clientMeta?.userAgent || existingSession.userAgent,
@@ -250,6 +255,10 @@ export class AuthService {
         expiresAt: newExpiresAt,
         createdAt: new Date(),
       });
+
+      if (!rotated) {
+        throw new UnauthorizedException('Invalid or revoked refresh token');
+      }
 
       return {
         accessToken: tokens.accessToken,
@@ -349,11 +358,14 @@ export class AuthService {
         );
     }
 
-    return {
+    const response: Record<string, any> = {
       success: true,
       message: 'Verification link has been sent.',
-      verificationToken,
     };
+    if (this.shouldExposeDevTokens()) {
+      response.verificationToken = verificationToken;
+    }
+    return response;
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
@@ -389,12 +401,15 @@ export class AuthService {
         );
     }
 
-    return {
+    const response: Record<string, any> = {
       success: true,
       message:
         'If an account exists with that email, a password reset link has been sent.',
-      resetToken,
     };
+    if (this.shouldExposeDevTokens()) {
+      response.resetToken = resetToken;
+    }
+    return response;
   }
 
   async resetPassword(dto: ResetPasswordDto) {
@@ -486,6 +501,13 @@ export class AuthService {
     return { success: true, message: 'All active sessions revoked' };
   }
 
+  private shouldExposeDevTokens(): boolean {
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    const devTokens =
+      this.configService.get<string>('EXPOSE_DEV_TOKENS') === 'true';
+    return !isProd && devTokens;
+  }
+
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
@@ -507,15 +529,19 @@ export class AuthService {
     const refreshSecret =
       this.configService.get<string>('JWT_REFRESH_SECRET') ||
       'kuizu_super_secret_refresh_key_2026';
+    const accessExpiresIn =
+      this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m';
+    const refreshExpiresIn =
+      this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d';
 
     const accessToken = this.jwtService.sign(payload, {
       secret: accessSecret,
-      expiresIn: '15m',
+      expiresIn: accessExpiresIn as any,
     });
 
     const refreshToken = this.jwtService.sign(refreshPayload, {
       secret: refreshSecret,
-      expiresIn: '7d',
+      expiresIn: refreshExpiresIn as any,
     });
 
     return { accessToken, refreshToken, sessionId: sid };

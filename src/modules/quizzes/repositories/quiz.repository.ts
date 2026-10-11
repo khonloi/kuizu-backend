@@ -9,6 +9,14 @@ import {
   createOffsetPaginatedResponse,
   createCursorPaginatedResponse,
 } from '../../../common/dto';
+import { escapeRegex } from '../../../common/utils/regex.util';
+
+const ALLOWED_QUIZ_SORT_FIELDS = new Set([
+  'createdAt',
+  'updatedAt',
+  'title',
+  'playCount',
+]);
 
 @Injectable()
 export class QuizRepository extends BaseRepository<QuizDocument> {
@@ -39,7 +47,7 @@ export class QuizRepository extends BaseRepository<QuizDocument> {
     const isCursorMode = query.mode === 'cursor' || Boolean(query.cursor);
 
     if (query.search && query.search.trim()) {
-      const term = query.search.trim();
+      const term = escapeRegex(query.search.trim());
       mongoFilter.$or = [
         { title: { $regex: term, $options: 'i' } },
         { description: { $regex: term, $options: 'i' } },
@@ -63,7 +71,10 @@ export class QuizRepository extends BaseRepository<QuizDocument> {
 
     const page = Number(query.page) > 0 ? Number(query.page) : 1;
     const skip = (page - 1) * limit;
-    const sortField = query.sortBy || 'createdAt';
+    const sortField =
+      query.sortBy && ALLOWED_QUIZ_SORT_FIELDS.has(query.sortBy)
+        ? query.sortBy
+        : 'createdAt';
     const sortDirection = query.sortOrder === 'asc' ? 1 : -1;
     const sort: Record<string, 1 | -1> = { [sortField]: sortDirection };
 
