@@ -1,22 +1,24 @@
-# Kuizu Backend 🎮
+# Kuizu Backend (v2)
 
-> Enterprise-grade, distributed micro-architecture backend uniting Duolingo-style self-paced language mastery with Kahoot-style real-time multiplayer projector battles. Built on **NestJS 12**, **MongoDB 7**, **Redis 7**, **Socket.IO 4**, and **BullMQ 6**.
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.x-brightgreen.svg?style=flat-square&logo=node.js)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/typescript-v5.9-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/nestjs-v12.0-E0234E.svg?style=flat-square&logo=nestjs)](https://nestjs.com/)
+[![MongoDB](https://img.shields.io/badge/database-mongodb%20%2F%20mongoose%209-green.svg?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/cache%20%26%20pubsub-redis%207-DC382D.svg?style=flat-square&logo=redis)](https://redis.io/)
+[![Socket.IO](https://img.shields.io/badge/realtime-socket.io%204.8-black.svg?style=flat-square&logo=socket.io)](https://socket.io/)
+[![BullMQ](https://img.shields.io/badge/jobs-bullmq%206-orange.svg?style=flat-square)](https://bullmq.io/)
+[![Vitest](https://img.shields.io/badge/tests-333%20passed%20%28100%25%29-green.svg?style=flat-square&logo=vitest)](https://vitest.dev/)
+[![Linter: oxlint](https://img.shields.io/badge/linter-oxlint-00D8FF.svg?style=flat-square)](https://oxc.rs/)
+[![Code Style: Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square&logo=prettier)](https://prettier.io)
 
-[![CI Status](https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square&logo=github-actions)](https://github.com/your-username/kuizu-backend/actions)
-[![NestJS](https://img.shields.io/badge/NestJS-12.0-E0234E?style=flat-square&logo=nestjs)](https://nestjs.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
-[![Redis](https://img.shields.io/badge/Redis-7.2-DC382D?style=flat-square&logo=redis)](https://redis.io/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8-black?style=flat-square&logo=socket.io)](https://socket.io/)
-[![BullMQ](https://img.shields.io/badge/BullMQ-6.3-orange?style=flat-square)](https://bullmq.io/)
-[![Vitest](https://img.shields.io/badge/Vitest-333%20Passed-green?style=flat-square&logo=vitest)](https://vitest.dev/)
-[![License](https://img.shields.io/badge/License-UNLICENSED-blue?style=flat-square)](<>)
+An enterprise-grade, production-ready, industry-standard backend engineered for modern gamified learning and real-time multiplayer arena competition (uniting **Duolingo-style quest curricula** with **Kahoot-style big-screen projector battles**). Built with **NestJS 12**, **TypeScript** in strict mode, **Mongoose 9 (MongoDB)**, **Redis 7**, **Socket.IO 4**, and **BullMQ 6**.
 
 ---
 
 ## Table of Contents
 
 - [Architectural Highlights](#architectural-highlights)
+- [System Architecture Diagram](#system-architecture-diagram)
 - [Tech Stack](#tech-stack)
 - [Project Directory Structure](#project-directory-structure)
 - [Prerequisites](#prerequisites)
@@ -24,76 +26,90 @@
 - [Environment Configuration](#environment-configuration)
 - [Available Scripts](#available-scripts)
 - [Security & Authentication Engine](#security--authentication-engine)
-  - [Dual-Token Rotation & Session Management](#dual-token-rotation--session-management)
+  - [Dual-Token Session Rotation & Revocation](#dual-token-session-rotation--revocation)
   - [Role-Based Access Control (RBAC) Matrix](#role-based-access-control-rbac-matrix)
-  - [Defense-in-Depth Pipeline](#defense-in-depth-pipeline)
-- [Real-Time Multiplayer Arena Engine](#real-time-multiplayer-arena-engine)
-  - [WebSocket Lifecycle & Event Catalog](#websocket-lifecycle--event-catalog)
-  - [Scoring Formula & Speed Multipliers](#scoring-formula--speed-multipliers)
-  - [Horizontal Scaling via Redis Adapter](#horizontal-scaling-via-redis-adapter)
-- [Gamification & Curriculum Systems](#gamification--curriculum-systems)
-  - [Sine-Wave Curriculum & Atomic Lesson Engine](#sine-wave-curriculum--atomic-lesson-engine)
-  - [Streak Calculation & Freeze Recovery](#streak-calculation--freeze-recovery)
-  - [Weekly League Division Progression](#weekly-league-division-progression)
-- [Asynchronous Job Processing (BullMQ)](#asynchronous-job-processing-bullmq)
+  - [Defense-in-Depth Security Pipeline](#defense-in-depth-security-pipeline)
+- [Real-time Multiplayer Arena (Socket.IO)](#real-time-multiplayer-arena-socketio)
+  - [WebSocket Gateway Protocol & Event Catalog](#websocket-gateway-protocol--event-catalog)
+  - [Distributed State Synchronization & Redis Pub/Sub](#distributed-state-synchronization--redis-pubsub)
 - [API Conventions & Querying](#api-conventions--querying)
-  - [Standard & Paginated Envelopes](#standard--paginated-envelopes)
-  - [Error Response Structure](#error-response-structure)
-- [Complete API Reference](#complete-api-reference)
-  - [1. Authentication (`/api/v1/auth`)](#1-authentication-apiv1auth)
-  - [2. User Profile & Social (`/api/v1/users`)](#2-user-profile--social-apiv1users)
-  - [3. Admin User Management (`/api/v1/admin/users`)](#3-admin-user-management-apiv1adminusers)
-  - [4. Curriculum Courses (`/api/v1/courses`)](#4-curriculum-courses-apiv1courses)
-  - [5. Quiz Bank & Questions (`/api/v1/quizzes`)](#5-quiz-bank--questions-apiv1quizzes)
-  - [6. System Health & Probes (`/api/v1/health`)](#6-system-health--probes-apiv1health)
+  - [Pagination Schema & Standard Envelopes](#pagination-schema--standard-envelopes)
+  - [Error Response Format](#error-response-format)
+- [API Reference](#api-reference)
+  - [1. Authentication & Session Management (`/api/v1/auth`)](#1-authentication--session-management-apiv1auth)
+  - [2. User Profile & Account Management (`/api/v1/users`)](#2-user-profile--account-management-apiv1users)
+  - [3. Gamification Engine (`/api/v1/users`)](#3-gamification-engine-apiv1users)
+  - [4. Admin User Management (`/api/v1/admin/users`)](#4-admin-user-management-apiv1adminusers)
+  - [5. Course & Curriculum Progression (`/api/v1/courses`)](#5-course--curriculum-progression-apiv1courses)
+  - [6. Quiz & Question Bank Catalog (`/api/v1/quizzes`, `/api/v1/questions`)](#6-quiz--question-bank-catalog-apiv1quizzes-apiv1questions)
+  - [7. System Health & Kubernetes Probes (`/api/v1/health`)](#7-system-health--kubernetes-probes-apiv1health)
+- [Background Processing & Worker Queues (BullMQ)](#background-processing--worker-queues-bullmq)
+- [Error Handling & Observability](#error-handling--observability)
 - [Testing & Quality Assurance](#testing--quality-assurance)
-- [Docker & Production Deployment](#docker--production-deployment)
+- [Production Deployment & Containerization](#production-deployment--containerization)
 - [License](#license)
 
 ---
 
 ## Architectural Highlights
 
-- **NestJS 12 Modular Architecture**: Structured domain modules (`auth`, `users`, `courses`, `quizzes`, `games`, `gamification`, `jobs`, `health`, `database`) ensuring loose coupling and maximum separation of concerns.
-- **Repository Pattern with Lean & Transactional Support**:
-  - Abstract [`BaseRepository<T>`](src/common/database/base.repository.ts) encapsulates Mongoose operations.
-  - High-performance lean query methods (`findLean`, `findOneLean`, `findByIdLean`) bypass heavyweight Mongoose document hydration on read-heavy routes.
-  - Multi-document ACID transactional unit-of-work support (`withTransaction`) for atomic streak updates, XP awards, and shop item deductions.
-- **Dual-Token Authentication & Device Session Tracking**:
-  - Stateless short-lived JWT Access Tokens (15 min) verified via HTTP-only cookies (`access_token`, `kuizu_session`) and `Authorization: Bearer` headers.
-  - Stateful rotating Refresh Tokens (7 days) tied to device fingerprints (`sessionId`, `userAgent`, `ipAddress`) with atomic rotation and session eviction.
-- **Distributed Real-Time WebSocket Gateway**:
-  - Live multiplayer game lobby with synchronized timers, 6-digit cryptographic PINs, and answer distribution bar charts.
-  - Socket.IO cluster scaling enabled via [`RedisIoAdapter`](src/common/adapters/redis-io.adapter.ts) and clean [`IGameStateStore`](src/modules/games/game-state.store.ts) interface contract.
-- **Asynchronous Task Queue (BullMQ & Redis)**:
-  - Offloaded background tasks for email verification delivery, game session persistence, and weekly league promotions.
-  - Resilient fallback mechanism that safely handles disconnected or in-memory environments without process crashes.
-- **Strict Runtime Contract Validation**:
-  - Request payloads and environment variables validated at startup and request boundaries using **Zod** (`ZodValidationPipe`).
-- **Production Observability & Telemetry**:
-  - High-performance structured JSON logging with **Pino**, sensitive credential redaction, and distributed request tracing with correlation IDs (`CorrelationIdMiddleware`).
-  - Kubernetes-native health checks with **Terminus** providing `/health/liveness` and `/health/readiness` probes.
+- **Clean Modular NestJS Architecture**: Domain-driven encapsulation divided into autonomous modules (`auth`, `users`, `courses`, `quizzes`, `games`, `gamification`, `jobs`, `health`).
+- **Data Access Layer with BaseRepository**: Generic repository pattern (`BaseRepository<T>`) encapsulating Mongoose models with support for `.lean()` read-heavy queries and `withTransaction` ACID transactional sessions.
+- **Dual-Token JWT Security with Session Revocation**: Access tokens (15m expiration) accompanied by refresh tokens (7d expiration) stored as hashed sessions with remote eviction, logout-all, and device tracking.
+- **Real-time Arena WebSocket Gateway**: Low-latency bidirectional gameplay powered by Socket.IO, with room partitioning, live answer distribution charts, Kahoot-formula scoring (time-decay + streak multipliers), and distributed horizontal scaling via `@socket.io/redis-adapter`.
+- **Gamification Mechanics**: Automated daily streaks, streak freeze protector consumable, heart depletion/refill mechanics, and weekly tiered competitive leagues (Bronze → Diamond) calculated via background workers.
+- **Resilient Background Job Queues (BullMQ)**: Asynchronous processing for transactional verification/reset emails, game report archiving, and league promotion/demotion standings, featuring automated graceful fallback when Redis is offline.
+- **Structured Observability**: High-throughput JSON logging with [Pino](https://github.com/pinojs/pino) (`nestjs-pino`), correlation IDs propagated across every HTTP request and worker job, Terminus Kubernetes readiness/liveness probes, and zero-leakage production error filters.
+
+---
+
+## System Architecture Diagram
+
+```mermaid
+graph TD
+    Client[Next.js 16 Web App / Mobile Gamepad] -->|HTTPS REST| Edge[Edge Proxy / Cloudflare]
+    Client -->|WSS Socket.IO| WsGateway[Games WebSocket Gateway]
+
+    subgraph "Kuizu Application Layer"
+        Edge --> NestCore[NestJS Core API]
+        NestCore --> GlobalGuards[Guards: JwtAuth, Roles, Throttler]
+        GlobalGuards --> Controllers[REST Controllers]
+
+        Controllers --> Services[Domain Business Services]
+        WsGateway --> GamesService[Games Arena Service]
+
+        Services --> Repositories[Repositories: Course, User, Quiz, Progress]
+        GamesService --> GameStateStore[IGameStateStore (Memory / Redis)]
+        Services --> BullProducer[BullMQ Jobs Producer]
+    end
+
+    subgraph "Infrastructure & Persistence Tier"
+        Repositories --> MongoDB[(MongoDB 7.0 Replica Set)]
+        BullProducer --> Redis[(Redis 7.2: Cache, Pub/Sub & Queues)]
+        GameStateStore -.->|Distributed Sync| Redis
+        BullWorkers[BullMQ Workers: Email, GameReports, Gamification] --> Redis
+    end
+```
 
 ---
 
 ## Tech Stack
 
-| Domain                       | Technology / Library                                                                                                | Purpose                                                                 |
-| :--------------------------- | :------------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------------------------- |
-| **Framework**                | [NestJS 12](https://nestjs.com/)                                                                                    | Enterprise-grade TypeScript server framework                            |
-| **Language & Runtime**       | [Node.js](https://nodejs.org/) (20+ / 22+) & [TypeScript 6](https://www.typescriptlang.org/)                        | Strict typing, ECMAScript 2022 target                                   |
-| **Database**                 | [MongoDB 7](https://www.mongodb.com/) & [Mongoose 9](https://mongoosejs.com/)                                       | Document persistence, schemas, and compound index optimization          |
-| **In-Memory Cache & Broker** | [Redis 7](https://redis.io/) & [ioredis](https://github.com/redis/ioredis)                                          | Distributed cache, rate limiter storage, and Pub/Sub broker             |
-| **Realtime WebSockets**      | [Socket.IO 4](https://socket.io/) & [@socket.io/redis-adapter](https://github.com/socketio/socket.io-redis-adapter) | Low-latency duplex live classroom quiz rooms                            |
-| **Queue & Worker Engine**    | [BullMQ 6](https://bullmq.io/) & [@nestjs/bullmq](https://github.com/nestjs/bullmq)                                 | Redis-backed asynchronous jobs and worker processors                    |
-| **Schema & Validation**      | [Zod 4](https://zod.dev/)                                                                                           | Type inference, runtime validation pipes, and environment validation    |
-| **Security & Auth**          | `passport-jwt`, `bcryptjs`, `helmet`, `cookie-parser`                                                               | Dual-token authentication, password hashing, and HTTP header protection |
-| **Rate Limiting**            | [@nestjs/throttler 6](https://github.com/nestjs/throttler)                                                          | Distributed sliding-window request throttling backed by Redis           |
-| **Structured Logging**       | [nestjs-pino 5](https://github.com/iamolegg/nestjs-pino) & [pino](https://getpino.io/)                              | High-speed structured logging with correlation IDs and redaction        |
-| **API Documentation**        | [@nestjs/swagger 12](https://github.com/nestjs/swagger)                                                             | OpenAPI 3.0 documentation generated dynamically at `/api/docs`          |
-| **Health Checks**            | [@nestjs/terminus 12](https://github.com/nestjs/terminus)                                                           | Liveness & Readiness Kubernetes probes                                  |
-| **Testing**                  | [Vitest 4](https://vitest.dev/) & [Supertest 7](https://github.com/ladjs/supertest)                                 | Blazing-fast unit and end-to-end integration test runners               |
-| **Linter & Formatting**      | [oxlint](https://oxc.rs/) & [Prettier 3](https://prettier.io/)                                                      | Rust-powered ultra-fast linting and code formatting                     |
+| Layer                   | Technology                                                                                                     | Purpose                                                                     |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| **Framework**           | [NestJS](https://nestjs.com/) (12.x)                                                                           | Enterprise architectural framework & dependency injection container         |
+| **Language & Runtime**  | [TypeScript](https://www.typescriptlang.org/) (5.9) / [Node.js](https://nodejs.org/) (20.x+)                   | Strict static typing, interfaces, and modern asynchronous runtime           |
+| **Database**            | [MongoDB](https://www.mongodb.com/) (7.x) via [Mongoose](https://mongoosejs.com/) (9.x)                        | Document-oriented persistence with schema validation & compound indexes     |
+| **Cache & Pub/Sub**     | [Redis](https://redis.io/) (7.x) via [ioredis](https://github.com/luin/ioredis) & [Keyv](https://keyv.js.org/) | Distributed cache manager, rate limit storage, and WebSocket adapter        |
+| **Realtime Engine**     | [Socket.IO](https://socket.io/) (4.8) & `@socket.io/redis-adapter`                                             | Bidirectional real-time arena battles with room clustering across pods      |
+| **Background Jobs**     | [BullMQ](https://bullmq.io/) (6.x)                                                                             | Distributed queue processing for emails, reports, and gamification          |
+| **Validation**          | [Zod](https://zod.dev/) (4.x) & NestJS Pipes                                                                   | Strong runtime schema validation for DTOs and environment config            |
+| **Auth & Cryptography** | [Passport-JWT](http://www.passportjs.org/), [bcryptjs](https://github.com/dcodeIO/bcrypt.js)                   | Dual-token authentication, hashed passwords, and cryptographic PINs         |
+| **Security Suite**      | [Helmet](https://helmetjs.github.io/), CORS, `@nestjs/throttler`                                               | Defense-in-depth protection against XSS, clickjacking, and DDoS/brute-force |
+| **Logging & Telemetry** | [Pino](https://getpino.io/) (`nestjs-pino`, `pino-http`, `pino-pretty`)                                        | High-speed structured JSON logging with correlation IDs (`X-Request-Id`)    |
+| **Health Checks**       | [NestJS Terminus](https://docs.nestjs.com/recipes/terminus)                                                    | Kubernetes `/health/liveness` and `/health/readiness` probes                |
+| **Testing Engine**      | [Vitest](https://vitest.dev/) (4.x) & [Supertest](https://github.com/ladjs/supertest)                          | Blazing-fast unit and end-to-end integration test execution                 |
+| **Linter & Formatting** | [oxlint](https://oxc.rs/), [Prettier](https://prettier.io/), [Husky](https://typicode.github.io/husky/)        | High-speed static analysis and git-hook verified code standards             |
 
 ---
 
@@ -102,56 +118,61 @@
 ```text
 kuizu-backend/
 ├── .github/
-│   └── workflows/ci.yml       # Automated GitHub Actions CI workflow (lint, typecheck, test, build)
-├── dist/                      # Production compiled JavaScript build artifacts
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI: Typecheck, Lint, Test, Build
+├── .husky/                    # Git pre-commit hooks (lint-staged)
+├── dist/                      # Compiled production JavaScript bundle
 ├── src/
 │   ├── common/                # Shared enterprise cross-cutting concerns
-│   │   ├── adapters/          # Socket.IO Redis distributed adapter
-│   │   ├── database/          # BaseRepository<T> with lean queries & ACID transactions
-│   │   ├── decorators/        # @CurrentUser, @Public, @Roles parameter/method decorators
-│   │   ├── dto/               # Universal pagination schemas (offset & cursor)
-│   │   ├── filters/           # AllExceptionsFilter with production error masking
-│   │   ├── guards/            # JwtAuthGuard, RolesGuard, ThrottlerGuard
-│   │   ├── middleware/        # CorrelationIdMiddleware (X-Request-Id, X-Correlation-Id)
+│   │   ├── adapters/          # Distributed Redis WebSocket adapter (RedisIoAdapter)
+│   │   ├── database/          # BaseRepository<T> with .lean() & withTransaction
+│   │   ├── decorators/        # @CurrentUser(), @Public(), @Roles() decorators
+│   │   ├── dto/               # Shared pagination DTOs and offset/cursor builders
+│   │   ├── filters/           # Global AllExceptionsFilter (production-masked errors)
+│   │   ├── guards/            # JwtAuthGuard, RolesGuard
+│   │   ├── middleware/        # CorrelationIdMiddleware (UUID request tracing)
 │   │   ├── pipes/             # ZodValidationPipe, ParseObjectIdPipe
-│   │   ├── redis/             # RedisModule & RedisService with in-memory fallback
+│   │   ├── redis/             # RedisModule & RedisService (with in-memory fallback)
 │   │   ├── throttler/         # RedisThrottlerStorageService
-│   │   └── utils/             # Regex sanitizers, string helpers
-│   ├── config/                # Environment schema validation with strict production guards
-│   ├── database/              # SeedService with initial demo accounts, courses, and quizzes
-│   ├── modules/               # Feature domain modules
-│   │   ├── auth/              # Dual-token auth, session rotation, password reset, JWT strategy
-│   │   ├── courses/           # Units, lessons, exercise progression, enriched curriculum
-│   │   ├── games/             # Live Arena gateway, GameStateStore, scoring, room PINs
-│   │   ├── gamification/      # Hearts economy, streak freezes, weekly Diamond leagues, XP
-│   │   ├── health/            # Kubernetes liveness & readiness health indicators
-│   │   ├── jobs/              # BullMQ queue producer and processors (email, reports, league)
-│   │   ├── quizzes/           # Questions, choices, tags, author banks, public showcases
-│   │   └── users/             # User profile, session revocation, admin role/status operations
-│   ├── app.module.ts          # Root NestJS application module wiring
-│   └── main.ts                # Application entrypoint, CORS, Swagger, shutdown hooks
-├── test/                      # End-to-end (E2E) integration test suites
-│   ├── app.e2e-spec.ts        # Root API bootstrap tests
-│   ├── auth-users.e2e-spec.ts # Auth endpoints, session security, admin guards
-│   ├── courses.e2e-spec.ts    # Course curriculum and lesson completion E2E
-│   └── quizzes.e2e-spec.ts    # Quiz creation, question queries, and public filtering
-├── Dockerfile                 # Multi-stage production container build (Alpine runtime)
-├── docker-compose.yml         # Container orchestration (MongoDB 7, Redis 7, Backend)
-├── vitest.config.ts           # Unit test configuration with native tsconfigPaths
-└── vitest.config.e2e.ts       # E2E test configuration
+│   │   └── utils/             # Regex sanitization and cryptographic helpers
+│   ├── config/                # Environment validation via Zod (env.validation.ts)
+│   ├── database/              # Mongoose database module & automatic SeedService
+│   ├── modules/               # Domain-driven feature modules
+│   │   ├── auth/              # Registration, login, session rotation, password recovery
+│   │   ├── courses/           # Courses, units, lesson progress, and XP completion
+│   │   ├── games/             # Arena WebSocket Gateway, service, and GameStateStore
+│   │   ├── gamification/      # Streaks, heart refills, streak freezes, and leaderboards
+│   │   ├── health/            # Terminus health checks (liveness & readiness probes)
+│   │   ├── jobs/              # BullMQ queue producer and email/report/league workers
+│   │   ├── quizzes/           # Quizzes catalog, questions bank, and tag search
+│   │   └── users/             # User profile, session eviction, and admin management
+│   ├── app.module.ts          # Root application module with logging, cache, and throttler
+│   └── main.ts                # Application bootstrap, Swagger setup, and shutdown hooks
+├── test/                      # End-to-End (E2E) test suites with Supertest
+│   ├── app.e2e-spec.ts        # Health check and root route tests
+│   ├── auth-users.e2e-spec.ts # Full authentication, profile, and admin user tests
+│   ├── courses.e2e-spec.ts    # Course curriculum and lesson completion E2E tests
+│   └── quizzes.e2e-spec.ts    # Quiz creation, question bank, and visibility tests
+├── Dockerfile                 # Multi-stage production container build (Node 22 Alpine)
+├── docker-compose.yml         # Container orchestration for App, MongoDB 7, and Redis 7
+├── nest-cli.json              # NestJS CLI configuration
+├── package.json               # NPM package manifest & scripts
+├── tsconfig.json              # Base TypeScript configuration
+├── vitest.config.ts           # Vitest configuration for unit tests
+└── vitest.config.e2e.ts       # Vitest configuration for E2E integration tests
 ```
 
 ---
 
 ## Prerequisites
 
-Ensure your environment meets these specifications:
+Ensure your environment satisfies the following requirements:
 
-- **Node.js**: `>= 20.0.0` (`v22.x LTS` recommended)
-- **Package Manager**: `npm` (`>= 10.x`) or `pnpm` (`>= 9.x`)
-- **Database**: [MongoDB 7.x](https://www.mongodb.com/) (local service or MongoDB Atlas cluster)
-- **Cache / Broker**: [Redis 7.x](https://redis.io/) (local service or managed Redis)
-- **Docker**: Optional, for containerized local dependencies
+- **Node.js**: `v20.x` or higher (`v22.x` recommended)
+- **Package Manager**: [npm](https://www.npmjs.com/) (`v10.x+`) or [pnpm](https://pnpm.io/)
+- **Database**: [MongoDB](https://www.mongodb.com/) (`v6.x` or `v7.x`) or MongoDB Atlas
+- **Cache & Message Broker**: [Redis](https://redis.io/) (`v7.x`)
+- **Containerization**: [Docker & Docker Compose](https://www.docker.com/) (optional, for local infrastructure)
 
 ---
 
@@ -172,388 +193,435 @@ npm install
 
 ### 3. Setup Environment Variables
 
-Copy `.env.example` to create your local `.env`:
+Copy `.env.example` to create your local `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-Review and adjust variables according to your local configuration.
+Review and configure your parameters (see [Environment Configuration](#environment-configuration)).
 
-### 4. Start Infrastructure via Docker (Recommended)
+### 4. Start Infrastructure via Docker Compose (Recommended)
 
-Spin up MongoDB and Redis in isolated containers:
+To spin up MongoDB 7.0 and Redis 7.2 locally in detached mode:
 
 ```bash
 docker compose up -d kuizu-mongo kuizu-redis
 ```
 
-### 5. Launch Development Server
+### 5. Launch the Development Server
 
 ```bash
 npm run start:dev
 ```
 
-The server will launch with hot-reloading at:
-
-- **REST API Base**: [http://localhost:4000/api/v1](http://localhost:4000/api/v1)
-- **Swagger Documentation**: [http://localhost:4000/api/docs](http://localhost:4000/api/docs)
+- **REST API Endpoint**: `http://localhost:4000/api/v1`
+- **Swagger Interactive API Documentation**: `http://localhost:4000/api/docs`
 - **WebSocket Gateway**: `ws://localhost:4000`
 
 ---
 
 ## Environment Configuration
 
-| Variable                 | Required |              Default              | Description                                                    | Example                                   |
-| :----------------------- | :------: | :-------------------------------: | :------------------------------------------------------------- | :---------------------------------------- |
-| `NODE_ENV`               |   Yes    |           `development`           | Runtime environment (`development`, `production`, `test`)      | `development`                             |
-| `PORT`                   |    No    |              `4000`               | Port on which NestJS HTTP server listens                       | `4000`                                    |
-| `CLIENT_URL`             |    No    |      `http://localhost:3001`      | Primary frontend web client URL                                | `http://localhost:3001`                   |
-| `CORS_ALLOWED_ORIGINS`   |    No    |      `CLIENT_URL,3000,3001`       | Comma-separated list of allowed CORS origins                   | `http://localhost:3001,https://kuizu.app` |
-| `MONGODB_URI`            |   Yes    | `mongodb://127.0.0.1:27017/kuizu` | MongoDB connection string (cannot be localhost in prod)        | `mongodb://127.0.0.1:27017/kuizu`         |
-| `JWT_ACCESS_SECRET`      |   Yes    |                 -                 | Secret key used to sign Access Tokens (min 32 chars in prod)   | `kuizu_super_secret_access_key_2026_dev`  |
-| `JWT_REFRESH_SECRET`     |   Yes    |                 -                 | Secret key used to sign Refresh Tokens (min 32 chars in prod)  | `kuizu_super_secret_refresh_key_2026_dev` |
-| `JWT_ACCESS_EXPIRATION`  |    No    |               `15m`               | Lifetime duration for access tokens                            | `15m`                                     |
-| `JWT_REFRESH_EXPIRATION` |    No    |               `7d`                | Lifetime duration for refresh tokens                           | `7d`                                      |
-| `REDIS_URI`              |    No    |     `redis://127.0.0.1:6379`      | Redis connection URL for caching, queues, and pub/sub          | `redis://127.0.0.1:6379`                  |
-| `EXPOSE_DEV_TOKENS`      |    No    |              `false`              | Expose raw tokens in registration/reset API (disabled in prod) | `false`                                   |
-| `ENABLE_SWAGGER`         |    No    |              `true`               | Expose interactive OpenAPI Swagger UI at `/api/docs`           | `true`                                    |
+Configuration is validated at application startup using strict Zod schemas in `src/config/env.validation.ts`. In `production`, default secrets and localhost URLs trigger startup rejection.
+
+| Variable                 |   Type   | Default                               | Description                                                  | Required |
+| :----------------------- | :------: | :------------------------------------ | :----------------------------------------------------------- | :------: |
+| `NODE_ENV`               |  `enum`  | `development`                         | Environment mode (`development`, `production`, `test`)       |   Yes    |
+| `PORT`                   | `number` | `4000`                                | HTTP port on which the API listens                           |    No    |
+| `CLIENT_URL`             | `string` | `http://localhost:3001`               | Primary origin allowed for CORS and cookie dispatch          |   Yes    |
+| `CORS_ALLOWED_ORIGINS`   | `string` | _derived_                             | Comma-separated list of allowed CORS origins                 |    No    |
+| `MONGODB_URI`            | `string` | `mongodb://127.0.0.1:27017/kuizu`     | MongoDB replica set connection URI                           |   Yes    |
+| `REDIS_URI`              | `string` | `redis://127.0.0.1:6379`              | Redis connection string for cache, adapter, & BullMQ         |    No    |
+| `JWT_ACCESS_SECRET`      | `string` | `kuizu_super_secret_access_key_2026`  | Secret key for signing access tokens (≥32 chars in prod)     |   Yes    |
+| `JWT_REFRESH_SECRET`     | `string` | `kuizu_super_secret_refresh_key_2026` | Secret key for signing refresh tokens (≥32 chars in prod)    |   Yes    |
+| `JWT_ACCESS_EXPIRATION`  | `string` | `15m`                                 | Lifetime duration for access tokens                          |    No    |
+| `JWT_REFRESH_EXPIRATION` | `string` | `7d`                                  | Lifetime duration for refresh tokens                         |    No    |
+| `EXPOSE_DEV_TOKENS`      |  `enum`  | `false`                               | Return verification/reset tokens in response for dev/testing |    No    |
+| `ENABLE_SWAGGER`         |  `enum`  | `true`                                | Explicitly enable Swagger documentation in production        |    No    |
 
 ---
 
 ## Available Scripts
 
-| Script         | Command              | Purpose                                                                     |
-| :------------- | :------------------- | :-------------------------------------------------------------------------- |
-| **start:dev**  | `npm run start:dev`  | Launches NestJS in watch mode with incremental compilation.                 |
-| **build**      | `npm run build`      | Compiles TypeScript source to production bundle in `dist/`.                 |
-| **start:prod** | `npm run start:prod` | Runs compiled production server from `dist/main.js`.                        |
-| **typecheck**  | `npm run typecheck`  | Validates TypeScript types across the entire project (`tsc --noEmit`).      |
-| **lint**       | `npm run lint`       | High-speed type-aware code quality verification via `oxlint`.               |
-| **format**     | `npm run format`     | Enforces code formatting style across all files via `prettier`.             |
-| **test**       | `npm test`           | Executes 300+ unit test suites using Vitest.                                |
-| **test:watch** | `npm run test:watch` | Runs unit tests in interactive watch mode.                                  |
-| **test:cov**   | `npm run test:cov`   | Collects unit test coverage report via V8.                                  |
-| **test:e2e**   | `npm run test:e2e`   | Runs comprehensive HTTP integration test suites against NestJS application. |
+| Command               | Purpose                                                                    |
+| :-------------------- | :------------------------------------------------------------------------- |
+| `npm run start`       | Launch NestJS application in standard mode                                 |
+| `npm run start:dev`   | Start application with hot-reload file watching                            |
+| `npm run start:debug` | Launch application in debug mode with V8 inspector                         |
+| `npm run start:prod`  | Run compiled production bundle from `dist/main.js`                         |
+| `npm run build`       | Compile TypeScript into optimized production output via Nest CLI           |
+| `npm run typecheck`   | Perform strict TypeScript compiler validation without output generation    |
+| `npm run lint`        | Execute high-speed static analysis across `src/` and `test/` with `oxlint` |
+| `npm run format`      | Enforce code style and indentation via Prettier                            |
+| `npm test`            | Execute 300+ unit test suites with Vitest in single-run mode               |
+| `npm run test:watch`  | Run Vitest in interactive watch mode for TDD workflows                     |
+| `npm run test:cov`    | Generate comprehensive V8 code coverage report                             |
+| `npm run test:e2e`    | Run complete end-to-end integration tests (`*.e2e-spec.ts`)                |
 
 ---
 
 ## Security & Authentication Engine
 
-### Dual-Token Rotation & Session Management
+### Dual-Token Session Rotation & Revocation
 
-Kuizu implements the OAuth 2.0 / RFC 6749 recommended token rotation pattern:
+The platform incorporates an atomic token rotation protocol designed to mitigate stolen session risk:
 
-```
-┌──────────┐                                                     ┌───────────────┐
-│  Client  │ ─── (1) POST /api/v1/auth/login ──────────────────> │  NestJS Auth  │
-│ (Browser)│ <── (2) Set-Cookie: access_token (15m), refresh (7d)│ (Stores Hash) │
-│          │                                                     └───────────────┘
-│          │ ─── (3) Request with Access Cookie or Bearer ─────> ┌───────────────┐
-│          │ <── (4) Authorized JSON Response ───────────────────│ Protected API │
-│          │                                                     └───────────────┘
-│          │ ─── (5) POST /api/v1/auth/refresh ────────────────> ┌───────────────┐
-│          │         [Validates & Rotates Session]               │ Session Store │
-│          │ <── (6) Issues New Access + Rotated Refresh Pair ───│ (MongoDB/User)│
-└──────────┘                                                     └───────────────┘
-```
-
-- **Cryptographic Hashing**: User passwords hashed using `bcryptjs` with 12 salt rounds.
-- **Session Tracking**: Active devices stored in `user.sessions` subdocuments. Calling `logout` invalidates the specific device session, while `DELETE /api/v1/auth/sessions?all=true` allows users to revoke all active sessions immediately.
-- **Session Capping**: Automatically limits active sessions to 10 devices per user using FIFO eviction.
+1. **Access Token (Short-Lived: 15m)**: Signed JWT containing user claims (`sub`, `email`, `role`, `sid`). Accepted via `Authorization: Bearer <token>` header or `access_token` / `kuizu_session` HTTP-only cookies.
+2. **Refresh Token (Long-Lived: 7d)**: Cryptographically linked to a `SessionInfo` record in MongoDB storing `tokenHash`, `userAgent`, `ipAddress`, and `expiresAt`.
+3. **Atomic Rotation**: Requesting `/api/v1/auth/refresh` consumes the old session and replaces it with a new `sessionId` and `tokenHash`.
+4. **Device Management**: Users can inspect active devices via `GET /api/v1/auth/sessions`, revoke individual sessions, or execute remote logout-all (`DELETE /api/v1/auth/sessions?all=true`).
 
 ### Role-Based Access Control (RBAC) Matrix
 
-| Endpoint Group                      | Description                                      | Public | User | Teacher | Admin |
-| :---------------------------------- | :----------------------------------------------- | :----: | :--: | :-----: | :---: |
-| `/api/v1/auth/*`                    | Registration, login, password reset              |   ✅   |  ✅  |   ✅    |  ✅   |
-| `/api/v1/courses` (GET)             | Browse published curriculum courses              |   ✅   |  ✅  |   ✅    |  ✅   |
-| `/api/v1/courses/:slug/curriculum`  | Enriched course units with learner progress      |   ❌   |  ✅  |   ✅    |  ✅   |
-| `/api/v1/courses` (POST/PUT/DELETE) | Course creation and content authoring            |   ❌   |  ❌  |   ✅    |  ✅   |
-| `/api/v1/quizzes` (GET)             | Search and list public community quizzes         |   ✅   |  ✅  |   ✅    |  ✅   |
-| `/api/v1/quizzes` (POST/PUT)        | Create & edit quizzes                            |   ❌   |  ✅  |   ✅    |  ✅   |
-| `/api/v1/quizzes/admin/all`         | Inspect all quizzes including unlisted           |   ❌   |  ❌  |   ❌    |  ✅   |
-| `/api/v1/admin/users/*`             | Manage roles, deactivate users, inspect accounts |   ❌   |  ❌  |   ❌    |  ✅   |
+| Endpoint Domain                             | Role: `user` | Role: `teacher` | Role: `admin` |
+| :------------------------------------------ | :----------: | :-------------: | :-----------: |
+| Self Profile & Account Deletion             |      ✅      |       ✅        |      ✅       |
+| Learn Curriculum & Lesson Completion        |      ✅      |       ✅        |      ✅       |
+| Multiplayer Arena Player (Join & Play)      |      ✅      |       ✅        |      ✅       |
+| Multiplayer Arena Host (Projector Room)     |      ✅      |       ✅        |      ✅       |
+| Create & Author Custom Quizzes              |      ✅      |       ✅        |      ✅       |
+| Publish / Update Courses & Curricula        |      ❌      |       ✅        |      ✅       |
+| Unrestricted Course Inspection (Admin View) |      ❌      |       ✅        |      ✅       |
+| Modify User Roles & Account Status          |      ❌      |       ❌        |      ✅       |
+| Inspect Global User Management Catalog      |      ❌      |       ❌        |      ✅       |
 
-### Defense-in-Depth Pipeline
+### Defense-in-Depth Security Pipeline
 
-1. **Helmet HTTP Headers**: Enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and strict HSTS.
-2. **Distributed Throttler**: Protects against brute-force attacks via Redis sliding-window limiters (e.g., maximum 5 login attempts per minute per IP).
-3. **Zod Validation Pipe**: Rejects unexpected or malformed body payloads with instant HTTP 400 Bad Request responses.
-4. **Production Error Masking**: Intercepts unhandled 500 errors to prevent leaking internal database schemas or stack traces to clients.
+- **HTTP Security Headers**: Enforced via [Helmet](https://helmetjs.github.io/) with strict Content Security Policy and frameguard protection.
+- **Throttler Defense (Redis-Backed)**: Global limit set to 120 req/min, with critical auth endpoints strictly capped at 5 req/min (`register`, `login`, `forgot-password`) to prevent credential stuffing.
+- **Zod Runtime Type Safety**: All incoming query parameters, route params, and request bodies pass through `ZodValidationPipe`, stripping unknown properties and halting invalid payloads at the door.
+- **Production Error Masking**: `AllExceptionsFilter` catches all operational and runtime exceptions, transforming internal 500 stack traces into generic `"Internal server error"` responses while logging correlation-tagged errors internally.
 
 ---
 
-## Real-Time Multiplayer Arena Engine
+## Real-time Multiplayer Arena (Socket.IO)
 
-### WebSocket Lifecycle & Event Catalog
+The Kuizu Arena enables synchronized classroom/projector gameplay matching Kahoot's competitive dynamics.
 
-The live multiplayer quiz arena communicates through the `@WebSocketGateway()` at port `4000`:
+### WebSocket Gateway Protocol & Event Catalog
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Host as Teacher / Host (Projector)
-    participant GW as GamesGateway
-    actor P1 as Player 1 (Mobile)
-    actor P2 as Player 2 (Mobile)
+    actor Host as Teacher / Host (Big Screen)
+    participant Gateway as GamesGateway (Socket.IO)
+    actor Player as Learner (Mobile Device)
 
-    Host->>GW: emit('host:create', { quizId })
-    GW-->>Host: ack({ success: true, pin: "582914" })
+    Host->>Gateway: emit("host:create", { quizId })
+    Gateway-->>Host: ack({ success: true, pin: "582914" })
 
-    P1->>GW: emit('player:join', { pin: "582914", nickname: "Kenji ⚡" })
-    GW-->>P1: ack({ success: true })
-    GW-->>Host: emit('player:joined', { nickname: "Kenji ⚡", playerCount: 1 })
+    Player->>Gateway: emit("player:join", { pin: "582914", nickname: "Alex" })
+    Gateway-->>Host: emit("player:joined", { nickname: "Alex", playerCount: 1 })
+    Gateway-->>Player: ack({ success: true, pin: "582914" })
 
-    P2->>GW: emit('player:join', { pin: "582914", nickname: "Sakura 🌸" })
-    GW-->>Host: emit('player:joined', { nickname: "Sakura 🌸", playerCount: 2 })
+    Host->>Gateway: emit("host:start")
+    Gateway-->>Host: emit("question:start", { questionText, choices, timeLimit })
+    Gateway-->>Player: emit("question:start", { questionText, choices, timeLimit })
 
-    Host->>GW: emit('host:start')
-    GW-->>Host: broadcast('question:start', questionPayload)
-    GW-->>P1: broadcast('question:start', questionPayload)
-    GW-->>P2: broadcast('question:start', questionPayload)
+    Player->>Gateway: emit("player:answer", { pin, choiceId })
+    Gateway-->>Host: emit("question:answer_count", { answeredCount: 1, totalPlayers: 1 })
 
-    P1->>GW: emit('player:answer', { pin: "582914", choiceId: "c-1" })
-    GW-->>Host: emit('question:answer_count', { answeredCount: 1, totalPlayers: 2 })
+    Host->>Gateway: emit("host:reveal")
+    Gateway-->>Host: emit("question:reveal", { correctChoiceId, answersDistribution })
+    Gateway-->>Player: emit("question:reveal", { correctChoiceId })
 
-    Host->>GW: emit('host:reveal')
-    GW-->>Host: broadcast('question:reveal', { correctChoiceId, answersDistribution })
-    GW-->>P1: broadcast('question:reveal', { correctChoiceId, answersDistribution })
-
-    Host->>GW: emit('host:next')
-    GW-->>Host: broadcast('game:ended', { podium, fullLeaderboard })
-    GW-->>P1: broadcast('game:ended', { podium, fullLeaderboard })
+    Host->>Gateway: emit("host:next")
+    Gateway-->>Host: emit("game:ended", { podium, fullLeaderboard })
+    Gateway-->>Player: emit("game:ended", { podium, fullLeaderboard })
 ```
 
-### Scoring Formula & Speed Multipliers
+#### Event Catalog
 
-Answers are scored dynamically using the **Kahoot competitive speed equation**:
+| Event Name              |    Direction     | Payload Schema                                                        | Description                                                         |
+| :---------------------- | :--------------: | :-------------------------------------------------------------------- | :------------------------------------------------------------------ |
+| `host:create`           | Client → Server  | `{ quizId: string }`                                                  | Host initializes a live room, generating a unique 6-digit PIN       |
+| `player:join`           | Client → Server  | `{ pin: string, nickname: string }`                                   | Player enters lobby with PIN and duplicate-checked nickname         |
+| `player:joined`         |  Server → Host   | `{ nickname: string, playerCount: number }`                           | Real-time notification of a new connected player                    |
+| `player:left`           |  Server → Host   | `{ nickname: string, socketId: string }`                              | Notification when a participant closes their browser or disconnects |
+| `host:start`            | Client → Server  | _empty_                                                               | Host transitions room state from `lobby` to first question          |
+| `question:start`        |   Server → All   | `{ questionIndex, totalQuestions, questionText, timeLimit, choices }` | Synchronized question launch (answer keys omitted)                  |
+| `player:answer`         | Client → Server  | `{ pin: string, choiceId: string }`                                   | Player submits selection before countdown expiration                |
+| `question:answer_count` |  Server → Host   | `{ answeredCount: number, totalPlayers: number }`                     | Live progress of submitted answers for projector display            |
+| `host:reveal`           | Client → Server  | _empty_                                                               | Host halts timer and exposes results                                |
+| `question:reveal`       |   Server → All   | `{ correctChoiceId, answersDistribution, leaderboard }`               | Visual breakdown of correct answers and round standings             |
+| `host:next`             | Client → Server  | _empty_                                                               | Host advances to next question or concludes game session            |
+| `game:ended`            |   Server → All   | `{ podium: Top3Winner[], fullLeaderboard: PlayerRank[] }`             | Olympic podium ceremony and cumulative score ranks                  |
+| `game:cancelled`        | Server → Players | `{ message: string }`                                                 | Emitted to room if host disconnects or leaves                       |
 
-$$\text{Points} = \left\lfloor \text{BasePoints} \times 0.5 \right\rfloor + \left\lfloor \text{BasePoints} \times 0.5 \times \frac{\text{TimeRemaining}}{\text{TimeLimit}} \right\rfloor + \min(\text{Streak} \times 50, 250)$$
+### Distributed State Synchronization & Redis Pub/Sub
 
-- **Accuracy**: Incorrect answers award `0` points and reset the streak counter to `0`.
-- **Speed Bonus**: Players who answer in the first second receive up to 99% of the speed bonus.
-- **Streak Bonus**: Continuous correct answers stack up to +250 bonus points per question.
+To support horizontal auto-scaling across Kubernetes pods:
 
-### Horizontal Scaling via Redis Adapter
-
-When `REDIS_URI` is configured, `RedisIoAdapter` attaches Redis Pub/Sub channels to Socket.IO. Multiple server pods behind an AWS ALB or Nginx reverse proxy seamlessly broadcast room events across containers.
-
----
-
-## Gamification & Curriculum Systems
-
-### Sine-Wave Curriculum & Atomic Lesson Engine
-
-- **Path Progression**: Courses consist of sequenced **Units** and **Lessons**.
-- **Atomic Verification**: Completing a lesson validates prerequisites in MongoDB and awards 20 XP.
-- **Progress Synchronization**: Endpoint `/api/v1/courses/:slug/curriculum` merges static course maps with dynamic user completion states.
-
-### Streak Calculation & Freeze Recovery
-
-- **Activity Recording**: Invoking `/api/v1/users/me/streak` calculates calendar day differences.
-- **Freeze Consumption**: If a learner misses a day and holds a `streakFreeze > 0`, the freeze is automatically consumed, maintaining the streak count.
-
-### Weekly League Division Progression
-
-- **Tier Hierarchy**: `Bronze` → `Silver` → `Gold` → `Sapphire` → `Ruby` → `Diamond`.
-- **Automated Partitioning**: The BullMQ `gamification-queue` evaluates user XP: top 20% of active players are promoted, while bottom 10% are demoted.
-
----
-
-## Asynchronous Job Processing (BullMQ)
-
-| Queue Name               | Job Name                     | Payload                                | Processing Action                                                                                    |
-| :----------------------- | :--------------------------- | :------------------------------------- | :--------------------------------------------------------------------------------------------------- |
-| **`email-queue`**        | `send-verification-email`    | `{ to, username, token }`              | Dispatches email verification message via transactional email provider.                              |
-| **`email-queue`**        | `send-password-reset-email`  | `{ to, username, token }`              | Sends secure password reset link to user.                                                            |
-| **`game-reports-queue`** | `save-game-session`          | `{ pin, quizId, players, hostUserId }` | Persists completed arena match records to `GameSession` collection and increments quiz play counter. |
-| **`gamification-queue`** | `calculate-league-standings` | `{ timestamp }`                        | Calculates weekly XP rankings and applies tier promotions/demotions.                                 |
+- **Socket Broadcasting**: Wrapped with `@socket.io/redis-adapter` using Redis Pub/Sub channels (`kuizu-games#*`).
+- **State Interface (`IGameStateStore`)**: The arena domain interacts through an abstract interface contract, decoupling gameplay from memory architecture and enabling plug-and-play Redis room stores.
 
 ---
 
 ## API Conventions & Querying
 
-### Standard & Paginated Envelopes
+### Pagination Schema & Standard Envelopes
 
-Endpoints support both direct resource arrays and structured pagination envelopes:
+Endpoints support both **raw collection arrays** (for client simplicity when no pagination is specified) and **paginated metadata envelopes** (when `page` or `limit` is queried):
 
-#### 1. Unpaginated List Response (Default)
+#### Offset-Based Pagination Query
 
-`GET /api/v1/courses`
-
-```json
-[
-  {
-    "_id": "60d0fe4f5311236168a109ca",
-    "title": "Japanese Foundations",
-    "slug": "japanese-foundations",
-    "isPublished": true
-  }
-]
+```http
+GET /api/v1/courses?page=1&limit=10&search=japanese&sortOrder=desc
 ```
 
-#### 2. Paginated Collection Envelope
-
-`GET /api/v1/courses?page=1&limit=20`
+#### Paginated Response Envelope
 
 ```json
 {
-  "data": [ ... ],
+  "data": [
+    {
+      "_id": "66e57bb3e24b4c732c58a101",
+      "title": "Japanese for Beginners",
+      "slug": "japanese-intro",
+      "description": "Master Hiragana, Katakana, and essential conversational grammar.",
+      "isPublished": true,
+      "units": []
+    }
+  ],
   "meta": {
-    "total": 48,
+    "total": 1,
     "page": 1,
-    "limit": 20,
-    "totalPages": 3,
-    "hasNextPage": true,
+    "limit": 10,
+    "totalPages": 1,
+    "hasNextPage": false,
     "hasPrevPage": false,
     "nextCursor": null
-  },
-  "total": 48,
-  "page": 1,
-  "limit": 20,
-  "totalPages": 3
+  }
 }
 ```
 
-### Error Response Structure
+### Error Response Format
 
-All HTTP errors follow the RFC 7807 compliant envelope with correlation tracking:
+All errors return a structured JSON contract containing correlation tracking:
 
 ```json
 {
   "statusCode": 400,
-  "timestamp": "2026-10-14T20:30:00.000Z",
+  "timestamp": "2026-10-14T21:30:00.000Z",
   "path": "/api/v1/auth/register",
-  "requestId": "550e8400-e29b-41d4-a716-446655440000",
-  "message": "Username must be at least 3 characters",
-  "errors": [ ... ]
+  "requestId": "e3b0c442-98fc-1c14-9afb-4c7601366281",
+  "message": "Username can only contain letters, numbers, and underscores"
 }
 ```
 
 ---
 
-## Complete API Reference
+## API Reference
 
-Interactive OpenAPI documentation is hosted at `http://localhost:4000/api/docs`.
+### 1. Authentication & Session Management (`/api/v1/auth`)
 
-### 1. Authentication (`/api/v1/auth`)
+| Method   | Endpoint                           |    Access     | Rate Limit | Description                                    |
+| :------- | :--------------------------------- | :-----------: | :--------: | :--------------------------------------------- |
+| `POST`   | `/api/v1/auth/register`            |    Public     | 5 req/min  | Create user profile & dispatch verification    |
+| `POST`   | `/api/v1/auth/login`               |    Public     | 5 req/min  | Authenticate credentials & return JWT tokens   |
+| `POST`   | `/api/v1/auth/refresh`             |    Public     | 20 req/min | Rotate session & issue new access token        |
+| `POST`   | `/api/v1/auth/logout`              | Bearer/Cookie |     —      | Invalidate session & clear auth cookies        |
+| `GET`    | `/api/v1/auth/me`                  | Bearer/Cookie |     —      | Retrieve authenticated user profile            |
+| `GET`    | `/api/v1/auth/sessions`            | Bearer/Cookie |     —      | List all active sessions with device telemetry |
+| `DELETE` | `/api/v1/auth/sessions/:sessionId` | Bearer/Cookie |     —      | Revoke a specific active device session        |
+| `DELETE` | `/api/v1/auth/sessions?all=true`   | Bearer/Cookie |     —      | Revoke all other / all active sessions         |
+| `POST`   | `/api/v1/auth/change-password`     | Bearer/Cookie | 10 req/min | Update password and invalidate other sessions  |
+| `POST`   | `/api/v1/auth/verify-email`        |    Public     | 10 req/min | Verify email address using verification token  |
+| `POST`   | `/api/v1/auth/resend-verification` |    Public     | 3 req/min  | Request a new verification email               |
+| `POST`   | `/api/v1/auth/forgot-password`     |    Public     | 3 req/min  | Request password reset token                   |
+| `POST`   | `/api/v1/auth/reset-password`      |    Public     | 10 req/min | Submit new password using reset token          |
 
-| Method   | Endpoint                           |    Access     | Description                                                           |
-| :------- | :--------------------------------- | :-----------: | :-------------------------------------------------------------------- |
-| `POST`   | `/api/v1/auth/register`            |    Public     | Register new user account. Returns user profile and sets JWT cookies. |
-| `POST`   | `/api/v1/auth/login`               |    Public     | Authenticate with email/username and password.                        |
-| `POST`   | `/api/v1/auth/refresh`             |    Public     | Rotate refresh token and receive fresh access token.                  |
-| `POST`   | `/api/v1/auth/logout`              | Authenticated | Revoke current device session and clear cookies.                      |
-| `GET`    | `/api/v1/auth/sessions`            | Authenticated | List all active device sessions for current user.                     |
-| `DELETE` | `/api/v1/auth/sessions/:sessionId` | Authenticated | Evict specific device session by ID.                                  |
-| `DELETE` | `/api/v1/auth/sessions?all=true`   | Authenticated | Revoke all active sessions across all devices.                        |
-| `POST`   | `/api/v1/auth/change-password`     | Authenticated | Change password for authenticated user.                               |
-| `POST`   | `/api/v1/auth/verify-email`        |    Public     | Confirm account email using verification token.                       |
-| `POST`   | `/api/v1/auth/resend-verification` |    Public     | Request a new email verification token.                               |
-| `POST`   | `/api/v1/auth/forgot-password`     |    Public     | Request password reset token via registered email.                    |
-| `POST`   | `/api/v1/auth/reset-password`      |    Public     | Set new password using reset token.                                   |
+#### Register User Example
 
-### 2. User Profile & Social (`/api/v1/users`)
+```http
+POST /api/v1/auth/register
+Content-Type: application/json
 
-| Method  | Endpoint                          |    Access     | Description                                               |
-| :------ | :-------------------------------- | :-----------: | :-------------------------------------------------------- |
-| `GET`   | `/api/v1/users/me`                | Authenticated | Retrieve current user profile and game stats.             |
-| `PATCH` | `/api/v1/users/me`                | Authenticated | Update user username or avatar URL.                       |
-| `POST`  | `/api/v1/users/me/streak`         | Authenticated | Record daily activity and calculate day streak.           |
-| `POST`  | `/api/v1/users/me/hearts/refill`  | Authenticated | Purchase full 5-heart refill for 50 gems.                 |
-| `POST`  | `/api/v1/users/me/hearts/consume` | Authenticated | Consume 1 quest heart upon answering incorrectly.         |
-| `POST`  | `/api/v1/users/me/streak-freeze`  | Authenticated | Purchase a streak freeze shield for 100 gems.             |
-| `GET`   | `/api/v1/users/leaderboard`       |    Public     | Fetch top players ranked by total experience points (XP). |
+{
+  "username": "duo_master",
+  "email": "learner@kuizu.app",
+  "password": "SuperSecretPassword123"
+}
+```
 
-### 3. Admin User Management (`/api/v1/admin/users`)
+**Response (`201 Created`)**:
 
-| Method   | Endpoint                         | Access | Description                                                |
-| :------- | :------------------------------- | :----: | :--------------------------------------------------------- |
-| `GET`    | `/api/v1/admin/users`            | Admin  | Search and inspect users with pagination and role filters. |
-| `GET`    | `/api/v1/admin/users/:id`        | Admin  | Get full user profile and session metadata.                |
-| `PATCH`  | `/api/v1/admin/users/:id/role`   | Admin  | Change user role (`user`, `teacher`, `admin`).             |
-| `PATCH`  | `/api/v1/admin/users/:id/status` | Admin  | Suspend or activate user account.                          |
-| `DELETE` | `/api/v1/admin/users/:id`        | Admin  | Permanently delete user account and evict sessions.        |
+```json
+{
+  "user": {
+    "id": "66e57bb3e24b4c732c58a101",
+    "email": "learner@kuizu.app",
+    "username": "duo_master",
+    "role": "user",
+    "xp": 0,
+    "hearts": 5,
+    "gems": 100,
+    "streak": { "count": 0, "lastActiveDate": null },
+    "league": "bronze"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
 
-### 4. Curriculum Courses (`/api/v1/courses`)
+---
 
-| Method   | Endpoint                                     |    Access     | Description                                                |
-| :------- | :------------------------------------------- | :-----------: | :--------------------------------------------------------- |
-| `GET`    | `/api/v1/courses`                            |    Public     | Browse all published curriculum courses.                   |
-| `GET`    | `/api/v1/courses/:slug`                      |    Public     | Retrieve course metadata and unit breakdown.               |
-| `GET`    | `/api/v1/courses/:slug/curriculum`           | Authenticated | Retrieve course units enriched with user unlocked states.  |
-| `GET`    | `/api/v1/courses/:slug/lessons/:id`          |    Public     | Retrieve interactive exercises for a specific lesson.      |
-| `POST`   | `/api/v1/courses/:slug/lessons/:id/complete` | Authenticated | Submit lesson completion, verify quest, and award XP.      |
-| `POST`   | `/api/v1/courses`                            | Teacher/Admin | Author and publish a new course curriculum.                |
-| `PUT`    | `/api/v1/courses/:id`                        | Teacher/Admin | Update units, lessons, or metadata for an existing course. |
-| `DELETE` | `/api/v1/courses/:id`                        | Teacher/Admin | Delete a course curriculum.                                |
+### 2. User Profile & Account Management (`/api/v1/users`)
 
-### 5. Quiz Bank & Questions (`/api/v1/quizzes`)
+| Method   | Endpoint                    |    Access     | Description                           |
+| :------- | :-------------------------- | :-----------: | :------------------------------------ |
+| `GET`    | `/api/v1/users/profile`     | Bearer/Cookie | Retrieve current user profile         |
+| `PATCH`  | `/api/v1/users/profile`     | Bearer/Cookie | Update username or avatar URL         |
+| `GET`    | `/api/v1/users/me/progress` | Bearer/Cookie | Retrieve list of completed lesson IDs |
+| `DELETE` | `/api/v1/users/me`          | Bearer/Cookie | Permanently delete own user account   |
 
-| Method   | Endpoint                             |    Access     | Description                                                 |
-| :------- | :----------------------------------- | :-----------: | :---------------------------------------------------------- |
-| `GET`    | `/api/v1/quizzes`                    |    Public     | List and search public community quizzes.                   |
-| `GET`    | `/api/v1/quizzes/my`                 | Authenticated | List all quizzes created by current authenticated user.     |
-| `GET`    | `/api/v1/quizzes/:id`                |    Public     | Retrieve quiz details (answer keys sanitized for learners). |
-| `POST`   | `/api/v1/quizzes`                    | Authenticated | Create a new community or classroom quiz.                   |
-| `PUT`    | `/api/v1/quizzes/:id`                | Authenticated | Update owned quiz title, tags, or description.              |
-| `DELETE` | `/api/v1/quizzes/:id`                | Authenticated | Delete owned quiz.                                          |
-| `POST`   | `/api/v1/quizzes/:id/questions`      | Authenticated | Add a question to an owned quiz bank.                       |
-| `DELETE` | `/api/v1/quizzes/:id/questions/:qId` | Authenticated | Remove a question from a quiz bank.                         |
+---
 
-### 6. System Health & Probes (`/api/v1/health`)
+### 3. Gamification Engine (`/api/v1/users`)
 
-| Method | Endpoint                   | Access | Description                                                          |
-| :----- | :------------------------- | :----: | :------------------------------------------------------------------- |
-| `GET`  | `/api/v1/health`           | Public | General service health, uptime, and database connection state.       |
-| `GET`  | `/api/v1/health/liveness`  | Public | Kubernetes liveness probe (validates process responsiveness).        |
-| `GET`  | `/api/v1/health/readiness` | Public | Kubernetes readiness probe (validates MongoDB & Redis connectivity). |
+| Method | Endpoint                       |    Access     | Description                                            |
+| :----- | :----------------------------- | :-----------: | :----------------------------------------------------- |
+| `GET`  | `/api/v1/users/leaderboard`    |    Public     | Global leaderboard ranked by XP                        |
+| `POST` | `/api/v1/users/activity`       | Bearer/Cookie | Record daily learning streak & evaluate streak freezes |
+| `POST` | `/api/v1/users/hearts/refill`  | Bearer/Cookie | Refill hearts to maximum (5) using 50 gems             |
+| `POST` | `/api/v1/users/hearts/consume` | Bearer/Cookie | Deduct 1 quest heart on incorrect answer               |
+| `POST` | `/api/v1/users/streak-freeze`  | Bearer/Cookie | Purchase a streak freeze protector (100 gems)          |
+
+---
+
+### 4. Admin User Management (`/api/v1/admin/users`)
+
+_All admin endpoints require `Authorization: Bearer <token>` with `role: "admin"`._
+
+| Method   | Endpoint                         | Access | Description                                                  |
+| :------- | :------------------------------- | :----: | :----------------------------------------------------------- |
+| `GET`    | `/api/v1/admin/users`            | Admin  | Paginated user management table with search and role filters |
+| `GET`    | `/api/v1/admin/users/:id`        | Admin  | Inspect full user profile and account details                |
+| `PATCH`  | `/api/v1/admin/users/:id/role`   | Admin  | Update user role (`user`, `teacher`, `admin`)                |
+| `PATCH`  | `/api/v1/admin/users/:id/status` | Admin  | Suspend or activate user account                             |
+| `DELETE` | `/api/v1/admin/users/:id`        | Admin  | Delete user account and revoke all sessions                  |
+
+---
+
+### 5. Course & Curriculum Progression (`/api/v1/courses`)
+
+| Method   | Endpoint                                           |     Access      | Description                                              |
+| :------- | :------------------------------------------------- | :-------------: | :------------------------------------------------------- |
+| `GET`    | `/api/v1/courses`                                  |     Public      | List all published courses (or paginated when queried)   |
+| `GET`    | `/api/v1/courses/:slug`                            |     Public      | Retrieve course structure and units by slug              |
+| `GET`    | `/api/v1/courses/:slug/curriculum`                 |     Bearer      | Get curriculum enriched with user completed/locked state |
+| `GET`    | `/api/v1/courses/:slug/lessons/:lessonId`          |     Public      | Retrieve exercise payloads for a specific lesson         |
+| `GET`    | `/api/v1/courses/:slug/progress`                   |     Bearer      | Get user progress percentage and completed lesson IDs    |
+| `POST`   | `/api/v1/courses/:slug/lessons/:lessonId/complete` |     Bearer      | Complete lesson, award 20 XP, and save progress          |
+| `GET`    | `/api/v1/courses/admin/all`                        | Teacher / Admin | List all courses including draft/unpublished             |
+| `POST`   | `/api/v1/courses`                                  | Teacher / Admin | Create a new curriculum course                           |
+| `PUT`    | `/api/v1/courses/:id`                              | Teacher / Admin | Update course metadata, units, and lessons               |
+| `DELETE` | `/api/v1/courses/:id`                              | Teacher / Admin | Delete course                                            |
+
+---
+
+### 6. Quiz & Question Bank Catalog (`/api/v1/quizzes`, `/api/v1/questions`)
+
+| Method   | Endpoint                | Access | Description                                                |
+| :------- | :---------------------- | :----: | :--------------------------------------------------------- |
+| `GET`    | `/api/v1/quizzes`       | Public | Search and list public multiplayer quizzes                 |
+| `GET`    | `/api/v1/quizzes/my`    | Bearer | List quizzes created by authenticated user                 |
+| `GET`    | `/api/v1/quizzes/:id`   | Public | Get quiz by ID (answer keys sanitized for public learners) |
+| `POST`   | `/api/v1/quizzes`       | Bearer | Create a new multiplayer quiz deck                         |
+| `PUT`    | `/api/v1/quizzes/:id`   | Bearer | Update quiz (author or admin verified)                     |
+| `DELETE` | `/api/v1/quizzes/:id`   | Bearer | Delete quiz                                                |
+| `POST`   | `/api/v1/questions`     | Bearer | Add question to question bank                              |
+| `GET`    | `/api/v1/questions/:id` | Bearer | Get specific question details                              |
+| `PUT`    | `/api/v1/questions/:id` | Bearer | Update question choices, points, or time limit             |
+| `DELETE` | `/api/v1/questions/:id` | Bearer | Delete question                                            |
+
+---
+
+### 7. System Health & Kubernetes Probes (`/api/v1/health`)
+
+| Method | Endpoint                   | Access | Description                                                    |
+| :----- | :------------------------- | :----: | :------------------------------------------------------------- |
+| `GET`  | `/api/v1/health`           | Public | Return server status, process uptime, and database status      |
+| `GET`  | `/api/v1/health/liveness`  | Public | Kubernetes liveness probe (process PID & health)               |
+| `GET`  | `/api/v1/health/readiness` | Public | Kubernetes readiness probe (MongoDB & Redis ping verification) |
+
+---
+
+## Background Processing & Worker Queues (BullMQ)
+
+Asynchronous workflows are handled via BullMQ queue workers backed by Redis:
+
+1. **`email-queue` ([`EmailProcessor`](src/modules/jobs/processors/email.processor.ts))**:
+   - Delivers account email verification links and password recovery tokens.
+2. **`game-reports-queue` ([`GameReportsProcessor`](src/modules/jobs/processors/game-reports.processor.ts))**:
+   - Persists completed live arena battle sessions and increments quiz play metrics.
+3. **`gamification-queue` ([`GamificationProcessor`](src/modules/jobs/processors/gamification.processor.ts))**:
+   - Calculates weekly tiered league standings, promoting top 20% to higher tier and demoting bottom 20%.
+
+_In environments without Redis configured, the producer seamlessly executes an in-process fallback to maintain operational continuity._
+
+---
+
+## Error Handling & Observability
+
+- **Structured Pino Logging**: Integrated through `nestjs-pino`. All logs output JSON format with correlation IDs (`x-request-id`, `x-correlation-id`) matching between incoming HTTP requests and outgoing responses.
+- **Sensitive Field Redaction**: Automatically censors authorization tokens, cookies, and password fields in HTTP payloads.
+- **Global AllExceptionsFilter**: Catches all errors, formats MongoDB unique key collisions (`11000`) and Mongoose `CastError` into clean 400/409 codes, and masks internal server errors in production.
+- **Kubernetes Probes**: Native Terminus health checks at `/api/v1/health/liveness` and `/api/v1/health/readiness`.
 
 ---
 
 ## Testing & Quality Assurance
 
-Kuizu Backend maintains **100% test pass rates** across both unit and end-to-end integration test suites:
+The codebase maintains **100% test passing health** with 330+ tests across unit and end-to-end suites powered by [Vitest](https://vitest.dev/):
 
 ```bash
-# Execute unit test suites (303 tests passing)
+# Run all unit tests
 npm test
 
-# Execute HTTP End-to-End integration test suites (30 tests passing)
+# Run tests in interactive watch mode
+npm run test:watch
+
+# Run end-to-end integration tests
 npm run test:e2e
 
-# Run type-checking
-npm run typecheck
-
-# Run ultra-fast type-aware linting
-npm run lint
+# Run with V8 code coverage
+npm run test:cov
 ```
+
+### Test Coverage Highlights
+
+- **Auth Service & Strategy Suites (`auth.service.spec.ts`, `jwt.strategy.spec.ts`)**: Validates password hashing, token issuance, session rotation, session eviction, email verification, and multi-cookie extraction.
+- **Arena & Socket Gateway Suites (`games.gateway.spec.ts`, `games.service.spec.ts`, `game-state.store.spec.ts`)**: Validates room PIN generation, duplicate nickname prevention, synchronized countdowns, speed-scoring bonuses, streak tracking, and answer distribution.
+- **Curriculum & Gamification Suites (`courses.service.spec.ts`, `gamification.service.spec.ts`)**: Validates unit unlocked progression, XP reward calculation, heart consumption, and daily streak freeze preservation.
+- **E2E Suites (`test/*.e2e-spec.ts`)**: Validates live HTTP requests against controllers with Supertest.
 
 ---
 
-## Docker & Production Deployment
+## Production Deployment & Containerization
 
-### Production Multi-Stage Container Build
-
-The application includes an optimized multi-stage `Dockerfile`:
+### 1. Build and Run via Docker Compose
 
 ```bash
-# Build production Docker image
-docker build -t kuizu-backend:latest .
+# Build and start all services (Backend, MongoDB, Redis)
+docker compose up -d --build
 
-# Run containerized application
-docker run -p 4000:4000 \
-  -e NODE_ENV=production \
-  -e MONGODB_URI=mongodb://user:pass@mongo-host:27017/kuizu \
-  -e REDIS_URI=redis://redis-host:6379 \
-  -e JWT_ACCESS_SECRET=your_32_character_production_access_key \
-  -e JWT_REFRESH_SECRET=your_32_character_production_refresh_key \
-  kuizu-backend:latest
+# View real-time aggregated logs
+docker compose logs -f kuizu-backend
+```
+
+### 2. Multi-Stage Dockerfile Compilation
+
+The application uses an optimized multi-stage [Dockerfile](Dockerfile) with `node:22-alpine`, pruning devDependencies and running as an unprivileged `node` user:
+
+```bash
+docker build -t kuizu-backend:latest .
+docker run -p 4000:4000 --env-file .env kuizu-backend:latest
 ```
 
 ---
 
 ## License
 
-UNLICENSED © Kuizu Platform. Proprietary and confidential.
+This project is licensed under the [ISC License](LICENSE).
