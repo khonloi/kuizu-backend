@@ -57,7 +57,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof Error &&
       status === HttpStatus.INTERNAL_SERVER_ERROR
     ) {
-      message = exception.message;
+      const isProduction = process.env.NODE_ENV === 'production';
+      message = isProduction ? 'Internal server error' : exception.message;
+      if (isProduction) {
+        errors = undefined;
+      }
     }
 
     const requestId =

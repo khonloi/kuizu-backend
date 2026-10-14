@@ -72,6 +72,15 @@ export class EmailProcessor extends WorkerHost {
 
   @OnWorkerEvent('error')
   onError(err: Error) {
+    if (
+      err.message.includes('ECONNREFUSED') ||
+      err.message.includes('Connection is closed')
+    ) {
+      this.logger.warn(
+        `Email queue worker connection unavailable: ${err.message}`,
+      );
+      return;
+    }
     this.logger.error(`Email queue worker error: ${err.message}`);
   }
 }

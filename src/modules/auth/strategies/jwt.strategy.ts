@@ -28,7 +28,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         (req: Request) => {
           let token: string | null = null;
           if (req && req.cookies) {
-            token = req.cookies['access_token'];
+            token =
+              req.cookies['access_token'] ||
+              req.cookies['kuizu_session'] ||
+              req.cookies['token'] ||
+              null;
           }
           if (!token && req.headers?.authorization) {
             const parts = req.headers.authorization.split(' ');

@@ -12,6 +12,20 @@ export const paginationQuerySchema = z.object({
 
 export type PaginationQueryDto = z.infer<typeof paginationQuerySchema>;
 
+export const optionalPaginationQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().optional(),
+  mode: z.enum(['offset', 'cursor']).optional(),
+  search: z.string().optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+});
+
+export type OptionalPaginationQueryDto = z.infer<
+  typeof optionalPaginationQuerySchema
+>;
+
 export interface PaginationQueryInputDto {
   page?: number | string;
   limit?: number | string;

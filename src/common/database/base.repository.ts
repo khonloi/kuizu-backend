@@ -5,6 +5,7 @@ import {
   QueryOptions,
   ProjectionType,
   Types,
+  ClientSession,
 } from 'mongoose';
 
 export abstract class BaseRepository<T> {
@@ -93,5 +94,47 @@ export abstract class BaseRepository<T> {
 
   async countDocuments(filter: QueryFilter<T> = {}): Promise<number> {
     return this.executeQuery(this.model.countDocuments(filter));
+  }
+
+  async findLean<R = T>(
+    filter: QueryFilter<T> = {},
+    projection?: ProjectionType<T> | null,
+    options?: QueryOptions<T>,
+  ): Promise<R[]> {
+    const query = this.model.find(filter, projection, options).lean();
+    return this.executeQuery(query);
+  }
+
+  async findOneLean<R = T>(
+    filter: QueryFilter<T>,
+    projection?: ProjectionType<T> | null,
+    options?: QueryOptions<T>,
+  ): Promise<R | null> {
+    const query = this.model.findOne(filter, projection, options).lean();
+    return this.executeQuery(query);
+  }
+
+  async findByIdLean<R = T>(
+    id: string | Types.ObjectId,
+    projection?: ProjectionType<T> | null,
+    options?: QueryOptions<T>,
+  ): Promise<R | null> {
+    const query = this.model.findById(id, projection, options).lean();
+    return this.executeQuery(query);
+  }
+
+  async withTransaction<R>(
+    fn: (session: ClientSession) => Promise<R>,
+  ): Promise<R> {
+    const session = await this.model.db.startSession();
+    try {
+      let result!: R;
+      await session.withTransaction(async () => {
+        result = await fn(session);
+      });
+      return result;
+    } finally {
+      await session.endSession();
+    }
   }
 }

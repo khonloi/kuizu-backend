@@ -24,8 +24,49 @@ export interface LiveGameSession {
   players: Map<string, PlayerState>; // keyed by socketId
 }
 
+export interface IGameStateStore {
+  generatePin(): string;
+  createSession(
+    hostSocketId: string,
+    quizId: string,
+    quizTitle: string,
+    questions: QuizQuestion[],
+    hostUserId?: string,
+  ): LiveGameSession;
+  getSession(pin: string): LiveGameSession | undefined;
+  getSessionByHost(hostSocketId: string): LiveGameSession | undefined;
+  addPlayer(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): { success: boolean; message?: string; player?: PlayerState };
+  recordAnswer(
+    pin: string,
+    socketId: string,
+    choiceId: string,
+  ): {
+    success: boolean;
+    isCorrect: boolean;
+    pointsEarned: number;
+    newScore: number;
+  };
+  getLeaderboard(pin: string): {
+    socketId: string;
+    nickname: string;
+    score: number;
+    streak: number;
+    lastAnswerScore: number;
+  }[];
+  removeSocket(socketId: string): {
+    pin?: string;
+    wasHost: boolean;
+    nickname?: string;
+  };
+  removeSession(pin: string): void;
+}
+
 @Injectable()
-export class GameStateStore {
+export class GameStateStore implements IGameStateStore {
   private sessions = new Map<string, LiveGameSession>(); // PIN -> session
   private hostToPin = new Map<string, string>(); // hostSocketId -> PIN
 

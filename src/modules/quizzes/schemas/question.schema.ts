@@ -51,5 +51,5 @@ export class Question {
 }
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
-QuestionSchema.index({ author: 1 });
+QuestionSchema.index({ author: 1, createdAt: -1 });
 QuestionSchema.index({ tags: 1 });

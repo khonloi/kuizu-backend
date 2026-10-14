@@ -35,7 +35,10 @@ import {
   UpdateCourseDto,
   updateCourseSchema,
 } from './dto/course.dto';
-import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
+import {
+  OptionalPaginationQueryDto,
+  optionalPaginationQuerySchema,
+} from '../../common/dto';
 
 @ApiTags('Courses')
 @Controller('courses')
@@ -51,8 +54,8 @@ export class CoursesController {
   @Get()
   @ApiOperation({ summary: 'List all published courses with pagination' })
   async getCourses(
-    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
-    pagination?: PaginationQueryDto,
+    @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
+    pagination?: OptionalPaginationQueryDto,
   ) {
     if (
       pagination &&
@@ -74,8 +77,8 @@ export class CoursesController {
     summary: 'List all courses including unpublished (Admin/Teacher only)',
   })
   async getAllCoursesAdmin(
-    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
-    pagination?: PaginationQueryDto,
+    @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
+    pagination?: OptionalPaginationQueryDto,
   ) {
     if (
       pagination &&

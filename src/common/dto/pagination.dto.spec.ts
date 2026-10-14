@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paginationQuerySchema,
+  optionalPaginationQuerySchema,
   cursorPaginationQuerySchema,
   createOffsetPaginatedResponse,
   createCursorPaginatedResponse,
@@ -33,6 +34,28 @@ describe('Pagination DTO & Helpers', () => {
     it('should cap limit to 100 max and min 1', () => {
       expect(() => paginationQuerySchema.parse({ limit: 150 })).toThrow();
       expect(() => paginationQuerySchema.parse({ limit: 0 })).toThrow();
+    });
+  });
+
+  describe('optionalPaginationQuerySchema', () => {
+    it('should keep page and limit undefined when empty object is passed', () => {
+      const parsed = optionalPaginationQuerySchema.parse({});
+      expect(parsed.page).toBeUndefined();
+      expect(parsed.limit).toBeUndefined();
+      expect(parsed.sortOrder).toBeUndefined();
+      expect(parsed.cursor).toBeUndefined();
+      expect(parsed.mode).toBeUndefined();
+    });
+
+    it('should coerce provided query parameters correctly', () => {
+      const parsed = optionalPaginationQuerySchema.parse({
+        page: '2',
+        limit: '10',
+        search: 'grammar',
+      });
+      expect(parsed.page).toBe(2);
+      expect(parsed.limit).toBe(10);
+      expect(parsed.search).toBe('grammar');
     });
   });
 

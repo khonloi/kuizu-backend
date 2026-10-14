@@ -34,7 +34,10 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { PaginationQueryDto, paginationQuerySchema } from '../../common/dto';
+import {
+  OptionalPaginationQueryDto,
+  optionalPaginationQuerySchema,
+} from '../../common/dto';
 
 @ApiTags('Quizzes')
 @Controller('quizzes')
@@ -51,8 +54,8 @@ export class QuizzesController {
   @ApiOperation({ summary: 'List public quizzes with pagination' })
   async findAll(
     @Query('author') authorId?: string,
-    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
-    pagination?: PaginationQueryDto,
+    @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
+    pagination?: OptionalPaginationQueryDto,
   ) {
     if (
       pagination &&
@@ -72,8 +75,8 @@ export class QuizzesController {
   @ApiOperation({ summary: 'Get quizzes created by logged-in user' })
   async findMyQuizzes(
     @CurrentUser('id') userId: string,
-    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
-    pagination?: PaginationQueryDto,
+    @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
+    pagination?: OptionalPaginationQueryDto,
   ) {
     if (
       pagination &&
@@ -93,8 +96,8 @@ export class QuizzesController {
   @Get('admin/all')
   @ApiOperation({ summary: 'List all quizzes including private (Admin only)' })
   async findAllAdmin(
-    @Query(new ZodValidationPipe(paginationQuerySchema.optional()))
-    pagination?: PaginationQueryDto,
+    @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
+    pagination?: OptionalPaginationQueryDto,
   ) {
     if (
       pagination &&
