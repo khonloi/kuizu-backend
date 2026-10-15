@@ -215,5 +215,34 @@ describe('GamesService', () => {
       const revealRes = service.revealQuestion('unknown-host');
       expect(revealRes.success).toBe(false);
     });
+
+    it('should reconnect player and return current question context if during question', () => {
+      const quizId = new Types.ObjectId().toString();
+      const session = mockGameStateStore.createSession(
+        'host-rec',
+        quizId,
+        'Rec Quiz',
+        [
+          {
+            id: 'q1',
+            questionText: 'What is 2+2?',
+            choices: [{ id: 'c1', text: '4', isCorrect: true }],
+            timeLimit: 30,
+            points: 1000,
+          } as any,
+        ],
+      );
+
+      mockGameStateStore.addPlayer(session.pin, 'p-old', 'Bob');
+      service.startGame('host-rec');
+
+      // Bob reconnects with new socket 'p-new'
+      const reconn = service.reconnectPlayer(session.pin, 'p-new', 'Bob');
+      expect(reconn.success).toBe(true);
+      expect(reconn.nickname).toBe('Bob');
+      expect(reconn.currentQuestion).toBeDefined();
+      expect(reconn.currentQuestion?.questionText).toBe('What is 2+2?');
+      expect(reconn.currentQuestion?.choices[0].text).toBe('4');
+    });
   });
 });

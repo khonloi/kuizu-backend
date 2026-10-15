@@ -9,6 +9,8 @@ export interface PlayerState {
   streak: number;
   answeredCurrent: boolean;
   lastAnswerScore: number;
+  isConnected?: boolean;
+  disconnectedAt?: number;
 }
 
 export interface LiveGameSession {
@@ -22,6 +24,9 @@ export interface LiveGameSession {
   state: 'lobby' | 'question' | 'reveal' | 'ended';
   questionStartTime: number;
   players: Map<string, PlayerState>; // keyed by socketId
+  disconnectedPlayers?: Map<string, PlayerState>; // keyed by lowercase nickname
+  createdAt: number;
+  lastActivityAt: number;
 }
 
 export interface IGameStateStore {
@@ -40,6 +45,12 @@ export interface IGameStateStore {
     socketId: string,
     nickname: string,
   ): { success: boolean; message?: string; player?: PlayerState };
+  reconnectPlayer(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): { success: boolean; message?: string; player?: PlayerState };
+  cleanupInactiveSessions(maxAgeMs?: number): number;
   recordAnswer(
     pin: string,
     socketId: string,
@@ -86,6 +97,7 @@ export class GameStateStore implements IGameStateStore {
     hostUserId?: string,
   ): LiveGameSession {
     const pin = this.generatePin();
+    const now = Date.now();
     const session: LiveGameSession = {
       pin,
       hostSocketId,
@@ -97,6 +109,9 @@ export class GameStateStore implements IGameStateStore {
       state: 'lobby',
       questionStartTime: 0,
       players: new Map(),
+      disconnectedPlayers: new Map(),
+      createdAt: now,
+      lastActivityAt: now,
     };
     this.sessions.set(pin, session);
     this.hostToPin.set(hostSocketId, pin);
@@ -142,10 +157,68 @@ export class GameStateStore implements IGameStateStore {
       streak: 0,
       answeredCurrent: false,
       lastAnswerScore: 0,
+      isConnected: true,
     };
 
     session.players.set(socketId, player);
+    session.lastActivityAt = Date.now();
     return { success: true, player };
+  }
+
+  reconnectPlayer(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): { success: boolean; message?: string; player?: PlayerState } {
+    const session = this.sessions.get(pin);
+    if (!session) {
+      return { success: false, message: 'Game PIN not found' };
+    }
+    if (session.state === 'ended') {
+      return { success: false, message: 'Game has already ended' };
+    }
+
+    const targetNickname = nickname.trim().toLowerCase();
+
+    // 1. Check disconnected players first
+    if (session.disconnectedPlayers?.has(targetNickname)) {
+      const player = session.disconnectedPlayers.get(targetNickname)!;
+      session.disconnectedPlayers.delete(targetNickname);
+      player.socketId = socketId;
+      player.isConnected = true;
+      delete player.disconnectedAt;
+      session.players.set(socketId, player);
+      session.lastActivityAt = Date.now();
+      return { success: true, player };
+    }
+
+    // 2. Check active players (e.g. rapid socket renewal)
+    for (const [oldSocketId, player] of session.players.entries()) {
+      if (player.nickname.toLowerCase() === targetNickname) {
+        session.players.delete(oldSocketId);
+        player.socketId = socketId;
+        player.isConnected = true;
+        delete player.disconnectedAt;
+        session.players.set(socketId, player);
+        session.lastActivityAt = Date.now();
+        return { success: true, player };
+      }
+    }
+
+    return { success: false, message: 'Player not found in this game room' };
+  }
+
+  cleanupInactiveSessions(maxAgeMs = 1000 * 60 * 60 * 2): number {
+    const now = Date.now();
+    let cleanedCount = 0;
+    for (const [pin, session] of this.sessions.entries()) {
+      if (now - session.lastActivityAt > maxAgeMs) {
+        this.hostToPin.delete(session.hostSocketId);
+        this.sessions.delete(pin);
+        cleanedCount++;
+      }
+    }
+    return cleanedCount;
   }
 
   recordAnswer(
@@ -232,7 +305,12 @@ export class GameStateStore implements IGameStateStore {
     const session = this.sessions.get(pin);
     if (!session) return [];
 
-    return Array.from(session.players.values())
+    const allPlayers = [
+      ...session.players.values(),
+      ...(session.disconnectedPlayers?.values() || []),
+    ];
+
+    return allPlayers
       .map((p) => ({
         socketId: p.socketId,
         nickname: p.nickname,
@@ -257,9 +335,21 @@ export class GameStateStore implements IGameStateStore {
 
     for (const [pin, session] of this.sessions.entries()) {
       if (session.players.has(socketId)) {
-        const player = session.players.get(socketId);
+        const player = session.players.get(socketId)!;
         session.players.delete(socketId);
-        return { pin, wasHost: false, nickname: player?.nickname };
+        if (session.state !== 'lobby') {
+          player.isConnected = false;
+          player.disconnectedAt = Date.now();
+          if (!session.disconnectedPlayers) {
+            session.disconnectedPlayers = new Map();
+          }
+          session.disconnectedPlayers.set(
+            player.nickname.toLowerCase(),
+            player,
+          );
+        }
+        session.lastActivityAt = Date.now();
+        return { pin, wasHost: false, nickname: player.nickname };
       }
     }
 

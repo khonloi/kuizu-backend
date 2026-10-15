@@ -30,6 +30,15 @@ const playerAnswerSchema = z.object({
   choiceId: z.string().min(1, 'Choice ID is required'),
 });
 
+const playerReconnectSchema = z.object({
+  pin: z.string().regex(/^\d{6}$/, 'PIN must be a 6-digit number'),
+  nickname: z
+    .string()
+    .trim()
+    .min(1, 'Nickname cannot be empty')
+    .max(30, 'Nickname cannot exceed 30 characters'),
+});
+
 @WebSocketGateway({
   cors: {
     origin: (
@@ -242,7 +251,50 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
         answeredCount: res.answeredCount,
         totalPlayers: res.totalPlayers,
       });
+
+      if (res.answeredCount === res.totalPlayers) {
+        this.server.to(`host:${data.pin}`).emit('question:all_answered', {
+          pin: data.pin,
+          answeredCount: res.answeredCount,
+          totalPlayers: res.totalPlayers,
+        });
+      }
     }
+
+    return res;
+  }
+
+  @SubscribeMessage('player:reconnect')
+  handlePlayerReconnect(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() rawData: unknown,
+  ) {
+    const parsed = playerReconnectSchema.safeParse(rawData);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message:
+          parsed.error.issues[0]?.message || 'Invalid reconnect parameters',
+      };
+    }
+    const data = parsed.data;
+
+    const res = this.gamesService.reconnectPlayer(
+      data.pin,
+      client.id,
+      data.nickname,
+    );
+
+    if (!res.success) {
+      return res;
+    }
+
+    void client.join(`game:${data.pin}`);
+
+    this.server.to(`host:${data.pin}`).emit('player:reconnected', {
+      nickname: res.nickname,
+      socketId: client.id,
+    });
 
     return res;
   }

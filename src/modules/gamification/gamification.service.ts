@@ -2,12 +2,17 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { UserRepository } from '../users/repositories';
+import { RedisService } from '../../common/redis/redis.service';
 
 @Injectable()
 export class GamificationService {
-  constructor(private readonly userRepository: UserRepository) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    @Optional() private readonly redisService?: RedisService,
+  ) {}
 
   async recordActivity(userId: string) {
     const user = await this.userRepository.findById(userId);
@@ -150,10 +155,26 @@ export class GamificationService {
   }
 
   async addXp(userId: string, points: number) {
-    return this.userRepository.addXp(userId, points);
+    const res = await this.userRepository.addXp(userId, points);
+    if (this.redisService) {
+      void this.redisService.delPattern('leaderboard:*');
+    }
+    return res;
   }
 
   async getLeaderboard(limit = 20) {
-    return this.userRepository.getLeaderboard(limit);
+    const cacheKey = `leaderboard:top:${limit}`;
+    if (this.redisService) {
+      const cached = await this.redisService.get<any[]>(cacheKey);
+      if (cached) return cached;
+    }
+
+    const leaderboard = await this.userRepository.getLeaderboard(limit);
+
+    if (this.redisService) {
+      await this.redisService.set(cacheKey, leaderboard, 60);
+    }
+
+    return leaderboard;
   }
 }

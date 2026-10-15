@@ -24,13 +24,40 @@ export class QuizzesService {
     questionIds?: string[],
     questions?: (string | CreateQuestionDto)[],
   ): Promise<Types.ObjectId[]> {
-    const resolvedIds: Types.ObjectId[] = [];
+    const referencedStringIds: string[] = [];
 
-    const validateAndAddQuestionId = async (id: string) => {
-      if (!Types.ObjectId.isValid(id)) {
-        throw new BadRequestException(`Invalid question ID: ${id}`);
+    if (questionIds && questionIds.length > 0) {
+      for (const id of questionIds) {
+        if (!Types.ObjectId.isValid(id)) {
+          throw new BadRequestException(`Invalid question ID: ${id}`);
+        }
+        referencedStringIds.push(id);
       }
-      const existing = await this.questionRepository.findByIdWithDetails(id);
+    }
+
+    if (questions && questions.length > 0) {
+      for (const item of questions) {
+        if (typeof item === 'string') {
+          if (!Types.ObjectId.isValid(item)) {
+            throw new BadRequestException(`Invalid question ID: ${item}`);
+          }
+          referencedStringIds.push(item);
+        }
+      }
+    }
+
+    const fetchedQuestions =
+      referencedStringIds.length > 0
+        ? await this.questionRepository.findByIdsWithDetails(
+            referencedStringIds,
+          )
+        : [];
+    const questionMap = new Map<string, any>(
+      fetchedQuestions.map((q) => [q._id.toString(), q]),
+    );
+
+    const validateQuestion = (id: string) => {
+      const existing = questionMap.get(id);
       if (!existing) {
         throw new NotFoundException(`Question not found: ${id}`);
       }
@@ -45,19 +72,22 @@ export class QuizzesService {
           `Cannot add question '${id}' owned by another user`,
         );
       }
-      resolvedIds.push(new Types.ObjectId(id));
     };
+
+    const resolvedIds: Types.ObjectId[] = [];
 
     if (questionIds && questionIds.length > 0) {
       for (const id of questionIds) {
-        await validateAndAddQuestionId(id);
+        validateQuestion(id);
+        resolvedIds.push(new Types.ObjectId(id));
       }
     }
 
     if (questions && questions.length > 0) {
       for (const item of questions) {
         if (typeof item === 'string') {
-          await validateAndAddQuestionId(item);
+          validateQuestion(item);
+          resolvedIds.push(new Types.ObjectId(item));
         } else if (item && typeof item === 'object') {
           const savedQuestion = await this.questionRepository.create({
             ...item,

@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Optional } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
+import { RedisService } from '../../../common/redis/redis.service';
 import { Request } from 'express';
 
 export interface JwtPayload {
@@ -18,6 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
+    @Optional() private readonly redisService?: RedisService,
   ) {
     const accessSecret =
       configService.get<string>('JWT_ACCESS_SECRET') ||
@@ -49,6 +51,24 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload) {
+    if (this.redisService) {
+      if (payload.sid) {
+        const isSessionRevoked = await this.redisService.get<string>(
+          `token:revoked:session:${payload.sid}`,
+        );
+        if (isSessionRevoked) {
+          throw new UnauthorizedException('Token has been revoked');
+        }
+      }
+
+      const isUserRevoked = await this.redisService.get<string>(
+        `token:revoked:user:${payload.sub}`,
+      );
+      if (isUserRevoked) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
+    }
+
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('User account no longer exists');

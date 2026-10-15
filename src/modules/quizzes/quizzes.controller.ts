@@ -24,6 +24,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { QuizzesService } from './quizzes.service';
+import { RedisService } from '../../common/redis/redis.service';
 import {
   CreateQuizDto,
   createQuizSchema,
@@ -45,7 +46,16 @@ export class QuizzesController {
   constructor(
     private readonly quizzesService: QuizzesService,
     @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
+
+  private async invalidateQuizCache() {
+    if (this.redisService) {
+      await this.redisService.delPattern('*quizzes*');
+    } else {
+      await this.cacheManager?.clear();
+    }
+  }
 
   @Public()
   @UseInterceptors(CacheInterceptor)
@@ -128,7 +138,7 @@ export class QuizzesController {
     @Body(new ZodValidationPipe(createQuizSchema)) dto: CreateQuizDto,
   ) {
     const result = await this.quizzesService.create(userId, dto);
-    await this.cacheManager?.clear();
+    await this.invalidateQuizCache();
     return result;
   }
 
@@ -143,7 +153,7 @@ export class QuizzesController {
   ) {
     const isAdmin = userRole === 'admin';
     const result = await this.quizzesService.update(id, userId, dto, isAdmin);
-    await this.cacheManager?.clear();
+    await this.invalidateQuizCache();
     return result;
   }
 
@@ -157,7 +167,7 @@ export class QuizzesController {
   ) {
     const isAdmin = userRole === 'admin';
     const result = await this.quizzesService.delete(id, userId, isAdmin);
-    await this.cacheManager?.clear();
+    await this.invalidateQuizCache();
     return result;
   }
 }

@@ -620,4 +620,71 @@ describe('AuthService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('logout and Redis revocation', () => {
+    it('should revoke session and access token in Redis on logout', async () => {
+      const mockRedisService = {
+        set: vi.fn().mockResolvedValue('OK'),
+      };
+      const customAuthService = new AuthService(
+        mockUsersService,
+        mockJwtService,
+        mockConfigService,
+        undefined,
+        mockRedisService as any,
+      );
+
+      mockJwtService.decode.mockReturnValue({ jti: 'sess-abc' });
+
+      const result = await customAuthService.logout(
+        'user-123',
+        'sample-refresh-token',
+        'sample-access-token',
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockUsersService.removeSession).toHaveBeenCalledWith(
+        'user-123',
+        'sess-abc',
+      );
+      expect(mockRedisService.set).toHaveBeenCalledWith(
+        'token:revoked:session:sess-abc',
+        'true',
+        900,
+      );
+      expect(mockRedisService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^token:revoked:/),
+        'true',
+        900,
+      );
+    });
+
+    it('should revoke session in Redis on revokeSession', async () => {
+      const mockRedisService = {
+        set: vi.fn().mockResolvedValue('OK'),
+      };
+      const customAuthService = new AuthService(
+        mockUsersService,
+        mockJwtService,
+        mockConfigService,
+        undefined,
+        mockRedisService as any,
+      );
+
+      const result = await customAuthService.revokeSession(
+        'user-123',
+        'sess-xyz',
+      );
+      expect(result.success).toBe(true);
+      expect(mockUsersService.removeSession).toHaveBeenCalledWith(
+        'user-123',
+        'sess-xyz',
+      );
+      expect(mockRedisService.set).toHaveBeenCalledWith(
+        'token:revoked:session:sess-xyz',
+        'true',
+        900,
+      );
+    });
+  });
 });

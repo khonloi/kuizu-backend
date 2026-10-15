@@ -110,5 +110,31 @@ describe('AdminUsersController', () => {
         BadRequestException,
       );
     });
+
+    it('should record audit log when action is performed by admin', async () => {
+      const mockAuditService = {
+        logAction: vi.fn().mockResolvedValue({}),
+      };
+      const controllerWithAudit = new AdminUsersController(
+        mockUsersService,
+        mockAuditService as any,
+      );
+
+      mockUsersService.updateUserRole.mockResolvedValue({
+        id: 'u1',
+        role: 'teacher',
+      });
+      await controllerWithAudit.updateUserRole('admin-1', 'u1', {
+        role: 'teacher',
+      });
+
+      expect(mockAuditService.logAction).toHaveBeenCalledWith({
+        userId: 'admin-1',
+        action: 'USER_ROLE_UPDATED',
+        targetEntity: 'User',
+        targetId: 'u1',
+        details: { newRole: 'teacher' },
+      });
+    });
   });
 });

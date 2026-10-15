@@ -88,6 +88,37 @@ export abstract class BaseRepository<T> {
     return this.executeQuery(this.model.findByIdAndDelete(id));
   }
 
+  async softDelete(
+    id: string | Types.ObjectId,
+    deletedBy?: string,
+  ): Promise<T | null> {
+    const update: any = {
+      $set: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        ...(deletedBy ? { deletedBy } : {}),
+      },
+    };
+    return this.executeQuery(
+      this.model.findByIdAndUpdate(id, update, { new: true }),
+    );
+  }
+
+  async restore(id: string | Types.ObjectId): Promise<T | null> {
+    const update: any = {
+      $set: {
+        isDeleted: false,
+        deletedAt: null,
+      },
+      $unset: {
+        deletedBy: 1,
+      },
+    };
+    return this.executeQuery(
+      this.model.findByIdAndUpdate(id, update, { new: true }),
+    );
+  }
+
   async deleteMany(filter: QueryFilter<T>): Promise<{ deletedCount?: number }> {
     return this.executeQuery(this.model.deleteMany(filter));
   }

@@ -33,6 +33,7 @@ describe('QuizzesService', () => {
         ...dto,
       })),
       findByIdWithDetails: vi.fn(),
+      findByIdsWithDetails: vi.fn().mockResolvedValue([]),
     };
 
     service = new QuizzesService(
@@ -56,7 +57,7 @@ describe('QuizzesService', () => {
       const authorId = new Types.ObjectId().toString();
       const questionId = new Types.ObjectId().toString();
 
-      mockQuestionRepository.findByIdWithDetails.mockResolvedValue(null);
+      mockQuestionRepository.findByIdsWithDetails.mockResolvedValue([]);
 
       await expect(
         service.create(authorId, {
@@ -71,10 +72,12 @@ describe('QuizzesService', () => {
       const otherAuthorId = new Types.ObjectId().toString();
       const questionId = new Types.ObjectId().toString();
 
-      mockQuestionRepository.findByIdWithDetails.mockResolvedValue({
-        _id: questionId,
-        author: { _id: otherAuthorId },
-      });
+      mockQuestionRepository.findByIdsWithDetails.mockResolvedValue([
+        {
+          _id: questionId,
+          author: { _id: otherAuthorId },
+        },
+      ]);
 
       await expect(
         service.create(authorId, {
@@ -88,10 +91,12 @@ describe('QuizzesService', () => {
       const authorId = new Types.ObjectId().toString();
       const questionId = new Types.ObjectId().toString();
 
-      mockQuestionRepository.findByIdWithDetails.mockResolvedValue({
-        _id: questionId,
-        author: { _id: authorId },
-      });
+      mockQuestionRepository.findByIdsWithDetails.mockResolvedValue([
+        {
+          _id: questionId,
+          author: { _id: authorId },
+        },
+      ]);
 
       const mockPopulatedQuiz = {
         _id: new Types.ObjectId(),

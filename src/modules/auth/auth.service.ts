@@ -13,6 +13,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { JobsProducerService } from '../jobs/jobs-producer.service';
+import { RedisService } from '../../common/redis/redis.service';
 import {
   RegisterDto,
   LoginDto,
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Optional() private readonly jobsProducerService?: JobsProducerService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   async register(
@@ -433,18 +435,37 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string, refreshToken?: string) {
+  async logout(userId: string, refreshToken?: string, accessToken?: string) {
     if (refreshToken) {
       try {
         const payload = this.jwtService.decode(refreshToken) as any;
         const sessionId = payload?.jti || payload?.sid;
         if (sessionId) {
           await this.usersService.removeSession(userId, sessionId);
+          if (this.redisService) {
+            await this.redisService.set(
+              `token:revoked:session:${sessionId}`,
+              'true',
+              900,
+            );
+          }
+          if (accessToken && this.redisService) {
+            const accessHash = this.hashToken(accessToken);
+            await this.redisService.set(
+              `token:revoked:${accessHash}`,
+              'true',
+              900,
+            );
+          }
           return { success: true, message: 'Logged out of current session' };
         }
       } catch {
         // decode failure falls through
       }
+    }
+    if (accessToken && this.redisService) {
+      const accessHash = this.hashToken(accessToken);
+      await this.redisService.set(`token:revoked:${accessHash}`, 'true', 900);
     }
     return { success: true, message: 'Logged out successfully' };
   }
@@ -473,6 +494,13 @@ export class AuthService {
 
   async revokeSession(userId: string, sessionId: string) {
     await this.usersService.removeSession(userId, sessionId);
+    if (this.redisService) {
+      await this.redisService.set(
+        `token:revoked:session:${sessionId}`,
+        'true',
+        900,
+      );
+    }
     return { success: true, message: 'Session revoked successfully' };
   }
 
@@ -498,6 +526,9 @@ export class AuthService {
 
   async revokeAllSessions(userId: string) {
     await this.usersService.removeAllSessions(userId);
+    if (this.redisService) {
+      await this.redisService.set(`token:revoked:user:${userId}`, 'true', 900);
+    }
     return { success: true, message: 'All active sessions revoked' };
   }
 

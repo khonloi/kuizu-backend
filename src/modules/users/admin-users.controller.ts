@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +17,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { AuditService } from '../audit/audit.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -35,7 +37,10 @@ import {
 @Roles('admin')
 @Controller('admin/users')
 export class AdminUsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    @Optional() private readonly auditService?: AuditService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -67,7 +72,17 @@ export class AdminUsersController {
     if (adminId && adminId === id) {
       throw new BadRequestException('Admins cannot modify their own role');
     }
-    return this.usersService.updateUserRole(id, dto.role);
+    const result = await this.usersService.updateUserRole(id, dto.role);
+    if (this.auditService) {
+      void this.auditService.logAction({
+        userId: adminId,
+        action: 'USER_ROLE_UPDATED',
+        targetEntity: 'User',
+        targetId: id,
+        details: { newRole: dto.role },
+      });
+    }
+    return result;
   }
 
   @Patch(':id/status')
@@ -84,7 +99,17 @@ export class AdminUsersController {
         'Admins cannot change their own account status',
       );
     }
-    return this.usersService.updateUserStatus(id, dto.isActive);
+    const result = await this.usersService.updateUserStatus(id, dto.isActive);
+    if (this.auditService) {
+      void this.auditService.logAction({
+        userId: adminId,
+        action: 'USER_STATUS_UPDATED',
+        targetEntity: 'User',
+        targetId: id,
+        details: { isActive: dto.isActive },
+      });
+    }
+    return result;
   }
 
   @Delete(':id')
@@ -99,6 +124,15 @@ export class AdminUsersController {
         'Admins cannot delete their own account via admin management',
       );
     }
-    return this.usersService.deleteAccount(id);
+    const result = await this.usersService.deleteAccount(id);
+    if (this.auditService) {
+      void this.auditService.logAction({
+        userId: adminId,
+        action: 'USER_DELETED_BY_ADMIN',
+        targetEntity: 'User',
+        targetId: id,
+      });
+    }
+    return result;
   }
 }

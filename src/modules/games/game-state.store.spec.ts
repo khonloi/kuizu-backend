@@ -167,5 +167,93 @@ describe('GameStateStore', () => {
       expect(res.nickname).toBe('Alice');
       expect(session.players.has('p1')).toBe(false);
     });
+
+    it('should retain player in disconnectedPlayers when game is active', () => {
+      const session = store.createSession(
+        'host-1',
+        'quiz-1',
+        'Geo',
+        mockQuestions,
+      );
+      store.addPlayer(session.pin, 'p1', 'Alice');
+      session.state = 'question';
+
+      const res = store.removeSocket('p1');
+      expect(res.wasHost).toBe(false);
+      expect(res.nickname).toBe('Alice');
+      expect(session.players.has('p1')).toBe(false);
+      expect(session.disconnectedPlayers?.has('alice')).toBe(true);
+
+      const leaderboard = store.getLeaderboard(session.pin);
+      expect(leaderboard.some((p) => p.nickname === 'Alice')).toBe(true);
+    });
+  });
+
+  describe('reconnectPlayer', () => {
+    it('should restore player state and update socketId after disconnect during game', () => {
+      const session = store.createSession(
+        'host-1',
+        'quiz-1',
+        'Geo',
+        mockQuestions,
+      );
+      store.addPlayer(session.pin, 'p1', 'Alice');
+      session.state = 'question';
+      session.currentQuestionIndex = 0;
+      session.questionStartTime = Date.now();
+
+      // Alice answers and gets points
+      store.recordAnswer(session.pin, 'p1', 'c1');
+      const originalScore = session.players.get('p1')?.score;
+
+      // Alice disconnects
+      store.removeSocket('p1');
+      expect(session.players.has('p1')).toBe(false);
+
+      // Alice reconnects with new socket 'p1-new'
+      const reconn = store.reconnectPlayer(session.pin, 'p1-new', 'Alice');
+      expect(reconn.success).toBe(true);
+      expect(reconn.player?.socketId).toBe('p1-new');
+      expect(reconn.player?.score).toBe(originalScore);
+      expect(reconn.player?.streak).toBe(1);
+      expect(session.players.get('p1-new')).toBeDefined();
+    });
+
+    it('should fail if session does not exist or nickname does not match', () => {
+      const notFoundRes = store.reconnectPlayer('999999', 'p2', 'Bob');
+      expect(notFoundRes.success).toBe(false);
+      expect(notFoundRes.message).toBe('Game PIN not found');
+
+      const session = store.createSession(
+        'host-1',
+        'quiz-1',
+        'Geo',
+        mockQuestions,
+      );
+      store.addPlayer(session.pin, 'p1', 'Alice');
+
+      const playerNotFound = store.reconnectPlayer(
+        session.pin,
+        'p2',
+        'UnknownPlayer',
+      );
+      expect(playerNotFound.success).toBe(false);
+      expect(playerNotFound.message).toBe('Player not found in this game room');
+    });
+  });
+
+  describe('cleanupInactiveSessions', () => {
+    it('should remove sessions older than maxAgeMs', () => {
+      const s1 = store.createSession('host-1', 'quiz-1', 'Geo', mockQuestions);
+      const s2 = store.createSession('host-2', 'quiz-2', 'Math', mockQuestions);
+
+      // Manually backdate s1 activity to 3 hours ago
+      s1.lastActivityAt = Date.now() - 3 * 60 * 60 * 1000;
+
+      const cleaned = store.cleanupInactiveSessions(2 * 60 * 60 * 1000);
+      expect(cleaned).toBe(1);
+      expect(store.getSession(s1.pin)).toBeUndefined();
+      expect(store.getSession(s2.pin)).toBeDefined();
+    });
   });
 });

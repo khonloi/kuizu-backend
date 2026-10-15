@@ -2,15 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  Optional,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { User, UserDocument, SessionInfo } from './schemas/user.schema';
-import {
-  UserProgress,
-  UserProgressDocument,
-} from '../courses/schemas/user-progress.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
@@ -22,9 +16,6 @@ export class UsersService {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly gamificationService: GamificationService,
-    @Optional()
-    @InjectModel(UserProgress.name)
-    private readonly userProgressModel?: Model<UserProgressDocument>,
   ) {}
 
   async create(userData: Partial<User>): Promise<UserDocument> {
@@ -177,11 +168,6 @@ export class UsersService {
     const user = await this.userRepository.deleteAccount(userId);
     if (!user) {
       throw new NotFoundException('User not found');
-    }
-    if (this.userProgressModel && Types.ObjectId.isValid(userId)) {
-      await this.userProgressModel.deleteMany({
-        user: new Types.ObjectId(userId),
-      });
     }
     return { success: true, message: 'Account deleted successfully' };
   }

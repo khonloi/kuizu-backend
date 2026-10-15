@@ -25,6 +25,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
+import { RedisService } from '../../common/redis/redis.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -46,7 +47,16 @@ export class CoursesController {
   constructor(
     private readonly coursesService: CoursesService,
     @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
+
+  private async invalidateCourseCache() {
+    if (this.redisService) {
+      await this.redisService.delPattern('*courses*');
+    } else {
+      await this.cacheManager?.clear();
+    }
+  }
 
   @Public()
   @UseInterceptors(CacheInterceptor)
@@ -102,7 +112,7 @@ export class CoursesController {
     @Body(new ZodValidationPipe(createCourseSchema)) dto: CreateCourseDto,
   ) {
     const result = await this.coursesService.create(dto);
-    await this.cacheManager?.clear();
+    await this.invalidateCourseCache();
     return result;
   }
 
@@ -115,7 +125,7 @@ export class CoursesController {
     @Body(new ZodValidationPipe(updateCourseSchema)) dto: UpdateCourseDto,
   ) {
     const result = await this.coursesService.update(id, dto);
-    await this.cacheManager?.clear();
+    await this.invalidateCourseCache();
     return result;
   }
 
@@ -125,7 +135,7 @@ export class CoursesController {
   @ApiOperation({ summary: 'Delete a course (Admin/Teacher only)' })
   async deleteCourse(@Param('id') id: string) {
     const result = await this.coursesService.delete(id);
-    await this.cacheManager?.clear();
+    await this.invalidateCourseCache();
     return result;
   }
 
@@ -185,7 +195,7 @@ export class CoursesController {
       slug,
       lessonId,
     );
-    await this.cacheManager?.clear();
+    await this.invalidateCourseCache();
     return result;
   }
 }

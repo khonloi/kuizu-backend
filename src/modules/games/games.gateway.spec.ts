@@ -212,5 +212,110 @@ describe('GamesGateway', () => {
       expect(throttledRes.success).toBe(false);
       expect(throttledRes.message).toContain('Too many failed join attempts');
     });
+
+    it('should emit question:all_answered when all players have submitted answers', async () => {
+      const hostClient: any = {
+        id: 'host-1',
+        data: { user: { id: new Types.ObjectId().toString() } },
+        join: vi.fn(),
+      };
+      const quizId = new Types.ObjectId().toString();
+      vi.spyOn(mockQuizzesService, 'findOne').mockResolvedValue({
+        _id: quizId,
+        title: 'Trivia',
+        questions: [
+          {
+            id: 'q1',
+            questionText: 'Q1',
+            choices: [{ id: 'c1', text: 'Ans1', isCorrect: true }],
+          },
+        ],
+      } as any);
+
+      const createRes = await gateway.handleHostCreate(hostClient, { quizId });
+      const pin = createRes.pin!;
+
+      const playerClient: any = { id: 'p1', join: vi.fn() };
+      gateway.handlePlayerJoin(playerClient, { pin, nickname: 'Alice' });
+
+      gateway.handleHostStart(hostClient);
+
+      const hostEmitter = { emit: vi.fn() };
+      mockServer.to.mockImplementation((room: string) => {
+        if (room === `host:${pin}`) return hostEmitter;
+        return { emit: vi.fn() };
+      });
+
+      gateway.handlePlayerAnswer(playerClient, { pin, choiceId: 'c1' });
+
+      expect(hostEmitter.emit).toHaveBeenCalledWith(
+        'question:all_answered',
+        expect.objectContaining({
+          pin,
+          answeredCount: 1,
+          totalPlayers: 1,
+        }),
+      );
+    });
+
+    it('should handle player:reconnect and notify host room', async () => {
+      const hostClient: any = {
+        id: 'host-1',
+        data: { user: { id: new Types.ObjectId().toString() } },
+        join: vi.fn(),
+      };
+      const quizId = new Types.ObjectId().toString();
+      vi.spyOn(mockQuizzesService, 'findOne').mockResolvedValue({
+        _id: quizId,
+        title: 'Trivia',
+        questions: [
+          {
+            id: 'q1',
+            questionText: 'Q1',
+            choices: [{ id: 'c1', text: 'Ans1', isCorrect: true }],
+          },
+        ],
+      } as any);
+
+      const createRes = await gateway.handleHostCreate(hostClient, { quizId });
+      const pin = createRes.pin!;
+
+      const playerClient1: any = { id: 'p1', join: vi.fn() };
+      gateway.handlePlayerJoin(playerClient1, { pin, nickname: 'Alice' });
+
+      gateway.handleHostStart(hostClient);
+
+      // Player 1 disconnects
+      gateway.handleDisconnect(playerClient1);
+
+      // Player 1 reconnects with new socket
+      const hostEmitter = { emit: vi.fn() };
+      mockServer.to.mockImplementation((room: string) => {
+        if (room === `host:${pin}`) return hostEmitter;
+        return { emit: vi.fn() };
+      });
+
+      const playerClient2: any = { id: 'p1-reconnected', join: vi.fn() };
+      const reconnRes = gateway.handlePlayerReconnect(playerClient2, {
+        pin,
+        nickname: 'Alice',
+      });
+
+      expect(reconnRes.success).toBe(true);
+      expect(playerClient2.join).toHaveBeenCalledWith(`game:${pin}`);
+      expect(hostEmitter.emit).toHaveBeenCalledWith('player:reconnected', {
+        nickname: 'Alice',
+        socketId: 'p1-reconnected',
+      });
+    });
+
+    it('should reject invalid reconnect parameters', () => {
+      const playerClient: any = { id: 'p-invalid', join: vi.fn() };
+      const res = gateway.handlePlayerReconnect(playerClient, {
+        pin: 'invalid',
+        nickname: '',
+      });
+      expect(res.success).toBe(false);
+    });
   });
 });

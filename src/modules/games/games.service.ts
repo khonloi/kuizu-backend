@@ -185,6 +185,63 @@ export class GamesService {
     };
   }
 
+  reconnectPlayer(pin: string, socketId: string, nickname: string) {
+    const result = this.gameStateStore.reconnectPlayer(pin, socketId, nickname);
+    if (!result.success || !result.player) {
+      return {
+        success: false,
+        message: result.message || 'Failed to reconnect to game',
+      };
+    }
+
+    const session = this.gameStateStore.getSession(pin);
+    if (!session) {
+      return { success: false, message: 'Game session not found' };
+    }
+
+    let currentQuestionPayload: any = null;
+    if (session.state === 'question' && session.currentQuestionIndex >= 0) {
+      const currentQuestion = session.questions[session.currentQuestionIndex];
+      if (currentQuestion) {
+        const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
+        const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
+        const remainingTime = Math.max(
+          0,
+          Math.round((timeLimitMs - timeElapsed) / 1000),
+        );
+        const playerChoices = currentQuestion.choices.map((c: QuizChoice) => ({
+          id: c.id,
+          text: c.text,
+          color: c.color,
+        }));
+
+        currentQuestionPayload = {
+          questionIndex: session.currentQuestionIndex,
+          totalQuestions: session.questions.length,
+          questionText: currentQuestion.questionText,
+          timeLimit: currentQuestion.timeLimit,
+          remainingTime,
+          points: currentQuestion.points,
+          mediaUrl: currentQuestion.mediaUrl,
+          choices: playerChoices,
+          alreadyAnswered: result.player.answeredCurrent,
+        };
+      }
+    }
+
+    return {
+      success: true,
+      pin,
+      nickname: result.player.nickname,
+      quizTitle: session.quizTitle,
+      gameState: session.state,
+      score: result.player.score,
+      streak: result.player.streak,
+      totalQuestions: session.questions.length,
+      currentQuestion: currentQuestionPayload,
+    };
+  }
+
   startGame(hostSocketId: string): StartGameResult {
     const session = this.gameStateStore.getSessionByHost(hostSocketId);
     if (!session) {

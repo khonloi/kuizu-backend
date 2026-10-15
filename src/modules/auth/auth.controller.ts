@@ -139,9 +139,16 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const token = req.cookies?.refresh_token || bodyToken;
+    const accessToken =
+      req.cookies?.access_token ||
+      (req.headers?.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7).trim()
+        : undefined);
     res.clearCookie('access_token');
     res.clearCookie('refresh_token', { path: AUTH_COOKIE_PATH });
-    return this.authService.logout(userId, token);
+    return accessToken
+      ? this.authService.logout(userId, token, accessToken)
+      : this.authService.logout(userId, token);
   }
 
   @ApiBearerAuth()

@@ -27,6 +27,7 @@ import { QuizzesModule } from './modules/quizzes/quizzes.module';
 import { GamesModule } from './modules/games/games.module';
 import { DatabaseModule } from './database/database.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -143,6 +144,7 @@ import { JobsModule } from './modules/jobs/jobs.module';
     GamesModule,
     DatabaseModule,
     JobsModule,
+    AuditModule,
   ],
   providers: [
     {

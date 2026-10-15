@@ -116,4 +116,40 @@ describe('JwtStrategy', () => {
       'Session has expired',
     );
   });
+
+  it('should throw UnauthorizedException if session is blocklisted in Redis', async () => {
+    const mockRedisService = {
+      get: vi.fn().mockImplementation((key: string) => {
+        if (key === 'token:revoked:session:session-abc') return 'true';
+        return null;
+      }),
+    };
+    const strategyWithRedis = new JwtStrategy(
+      mockConfigService,
+      mockUsersService,
+      mockRedisService as any,
+    );
+
+    await expect(strategyWithRedis.validate(validPayload)).rejects.toThrow(
+      'Token has been revoked',
+    );
+  });
+
+  it('should throw UnauthorizedException if user is blocklisted in Redis', async () => {
+    const mockRedisService = {
+      get: vi.fn().mockImplementation((key: string) => {
+        if (key === 'token:revoked:user:user-123') return 'true';
+        return null;
+      }),
+    };
+    const strategyWithRedis = new JwtStrategy(
+      mockConfigService,
+      mockUsersService,
+      mockRedisService as any,
+    );
+
+    await expect(strategyWithRedis.validate(validPayload)).rejects.toThrow(
+      'Token has been revoked',
+    );
+  });
 });
