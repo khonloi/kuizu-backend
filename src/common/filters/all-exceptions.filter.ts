@@ -5,12 +5,16 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  constructor(@Optional() private readonly configService?: ConfigService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -57,7 +61,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof Error &&
       status === HttpStatus.INTERNAL_SERVER_ERROR
     ) {
-      const isProduction = process.env.NODE_ENV === 'production';
+      const isProduction =
+        (this.configService?.get<string>('NODE_ENV') ??
+          process.env.NODE_ENV) === 'production';
       message = isProduction ? 'Internal server error' : exception.message;
       if (isProduction) {
         errors = undefined;

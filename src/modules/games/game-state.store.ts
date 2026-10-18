@@ -29,7 +29,19 @@ export interface LiveGameSession {
   lastActivityAt: number;
 }
 
-export interface IGameStateStore {
+export interface IGameStateReader {
+  getSession(pin: string): LiveGameSession | undefined;
+  getSessionByHost(hostSocketId: string): LiveGameSession | undefined;
+  getLeaderboard(pin: string): {
+    socketId: string;
+    nickname: string;
+    score: number;
+    streak: number;
+    lastAnswerScore: number;
+  }[];
+}
+
+export interface IGameStateWriter {
   generatePin(): string;
   createSession(
     hostSocketId: string,
@@ -38,8 +50,6 @@ export interface IGameStateStore {
     questions: QuizQuestion[],
     hostUserId?: string,
   ): LiveGameSession;
-  getSession(pin: string): LiveGameSession | undefined;
-  getSessionByHost(hostSocketId: string): LiveGameSession | undefined;
   addPlayer(
     pin: string,
     socketId: string,
@@ -61,13 +71,6 @@ export interface IGameStateStore {
     pointsEarned: number;
     newScore: number;
   };
-  getLeaderboard(pin: string): {
-    socketId: string;
-    nickname: string;
-    score: number;
-    streak: number;
-    lastAnswerScore: number;
-  }[];
   removeSocket(socketId: string): {
     pin?: string;
     wasHost: boolean;
@@ -75,6 +78,8 @@ export interface IGameStateStore {
   };
   removeSession(pin: string): void;
 }
+
+export interface IGameStateStore extends IGameStateReader, IGameStateWriter {}
 
 @Injectable()
 export class GameStateStore implements IGameStateStore {

@@ -8,15 +8,9 @@ import {
   Param,
   Query,
   UseInterceptors,
-  Inject,
   Optional,
 } from '@nestjs/common';
-import {
-  CacheInterceptor,
-  CacheTTL,
-  CACHE_MANAGER,
-  Cache,
-} from '@nestjs/cache-manager';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import {
   ApiTags,
   ApiOperation,
@@ -24,7 +18,10 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { QuizzesService } from './quizzes.service';
-import { RedisService } from '../../common/redis/redis.service';
+import {
+  CacheInvalidationService,
+  CacheNamespace,
+} from '../../common/cache/cache-invalidation.service';
 import {
   CreateQuizDto,
   createQuizSchema,
@@ -45,16 +42,23 @@ import {
 export class QuizzesController {
   constructor(
     private readonly quizzesService: QuizzesService,
-    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
-    @Optional() private readonly redisService?: RedisService,
+    @Optional()
+    private readonly cacheInvalidationService?: CacheInvalidationService,
   ) {}
 
-  private async invalidateQuizCache() {
-    if (this.redisService) {
-      await this.redisService.delPattern('*quizzes*');
-    } else {
-      await this.cacheManager?.clear();
-    }
+  private async invalidateQuizCache(): Promise<void> {
+    await this.cacheInvalidationService?.invalidate(CacheNamespace.QUIZZES);
+  }
+
+  private hasPagination(pagination?: OptionalPaginationQueryDto): boolean {
+    return Boolean(
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode),
+    );
   }
 
   @Public()
@@ -67,14 +71,7 @@ export class QuizzesController {
     @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
     pagination?: OptionalPaginationQueryDto,
   ) {
-    if (
-      pagination &&
-      (pagination.page ||
-        pagination.limit ||
-        pagination.cursor ||
-        pagination.search ||
-        pagination.mode)
-    ) {
+    if (this.hasPagination(pagination)) {
       return this.quizzesService.findAll(false, authorId, pagination);
     }
     return this.quizzesService.findAll(false, authorId);
@@ -88,14 +85,7 @@ export class QuizzesController {
     @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
     pagination?: OptionalPaginationQueryDto,
   ) {
-    if (
-      pagination &&
-      (pagination.page ||
-        pagination.limit ||
-        pagination.cursor ||
-        pagination.search ||
-        pagination.mode)
-    ) {
+    if (this.hasPagination(pagination)) {
       return this.quizzesService.findAll(true, userId, pagination);
     }
     return this.quizzesService.findAll(true, userId);
@@ -109,14 +99,7 @@ export class QuizzesController {
     @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
     pagination?: OptionalPaginationQueryDto,
   ) {
-    if (
-      pagination &&
-      (pagination.page ||
-        pagination.limit ||
-        pagination.cursor ||
-        pagination.search ||
-        pagination.mode)
-    ) {
+    if (this.hasPagination(pagination)) {
       return this.quizzesService.findAllAdmin(pagination);
     }
     return this.quizzesService.findAllAdmin();

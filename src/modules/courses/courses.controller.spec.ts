@@ -129,4 +129,16 @@ describe('CoursesController', () => {
     expect(res).toBe(expected);
     expect(spy).toHaveBeenCalledWith('user-123', 'french-1', 'lesson-1');
   });
+
+  it('should call cacheInvalidationService.invalidate when updating a course', async () => {
+    const mockCacheService = {
+      invalidate: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctrl = new CoursesController(service, mockCacheService as any);
+    vi.spyOn(service, 'update').mockResolvedValue({ _id: 'c-1' } as any);
+
+    await ctrl.updateCourse('c-1', { title: 'Updated Course' } as any);
+
+    expect(mockCacheService.invalidate).toHaveBeenCalledWith('courses');
+  });
 });

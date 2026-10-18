@@ -89,6 +89,7 @@ describe('GamesGateway', () => {
 
       const res = await gateway.handleHostCreate(mockClient, { quizId });
       expect(res.success).toBe(false);
+      if (res.success) throw new Error('Expected failure');
       expect(res.message).toBe('Quiz has no questions');
     });
 
@@ -233,7 +234,9 @@ describe('GamesGateway', () => {
       } as any);
 
       const createRes = await gateway.handleHostCreate(hostClient, { quizId });
-      const pin = createRes.pin!;
+      expect(createRes.success).toBe(true);
+      if (!createRes.success) throw new Error('Host create failed');
+      const pin = createRes.pin;
 
       const playerClient: any = { id: 'p1', join: vi.fn() };
       gateway.handlePlayerJoin(playerClient, { pin, nickname: 'Alice' });
@@ -278,7 +281,9 @@ describe('GamesGateway', () => {
       } as any);
 
       const createRes = await gateway.handleHostCreate(hostClient, { quizId });
-      const pin = createRes.pin!;
+      expect(createRes.success).toBe(true);
+      if (!createRes.success) throw new Error('Host create failed');
+      const pin = createRes.pin;
 
       const playerClient1: any = { id: 'p1', join: vi.fn() };
       gateway.handlePlayerJoin(playerClient1, { pin, nickname: 'Alice' });

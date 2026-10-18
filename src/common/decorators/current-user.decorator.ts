@@ -7,11 +7,14 @@ export interface CurrentUserData {
   role: string;
 }
 
-export const CurrentUser = createParamDecorator(
-  (data: keyof CurrentUserData | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    const user = request.user as CurrentUserData | undefined;
-    if (!user) return null;
-    return data ? user[data] : user;
-  },
-);
+export function getCurrentUserFromContext(
+  data: keyof CurrentUserData | undefined,
+  ctx: ExecutionContext,
+): unknown {
+  const request = ctx.switchToHttp().getRequest();
+  const user = request.user as CurrentUserData | undefined;
+  if (!user) return null;
+  return data ? user[data] : user;
+}
+
+export const CurrentUser = createParamDecorator(getCurrentUserFromContext);

@@ -17,6 +17,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
 import { RedisModule } from './common/redis/redis.module';
 import { RedisService } from './common/redis/redis.service';
 import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
+import { CacheInvalidationModule } from './common/cache/cache-invalidation.module';
 
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -97,6 +98,7 @@ import { AuditModule } from './modules/audit/audit.module';
       }),
     }),
     RedisModule,
+    CacheInvalidationModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
       inject: [RedisService],

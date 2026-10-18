@@ -1,16 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, QueryFilter, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { BaseRepository } from '../../../common/database';
 import { Course, CourseDocument } from '../schemas/course.schema';
 import { CreateCourseDto } from '../dto/course.dto';
 import {
   PaginationQueryInputDto,
   PaginatedResponse,
-  createOffsetPaginatedResponse,
-  createCursorPaginatedResponse,
 } from '../../../common/dto';
-import { escapeRegex } from '../../../common/utils/regex.util';
 
 const ALLOWED_COURSE_SORT_FIELDS = new Set([
   'createdAt',
@@ -40,60 +37,19 @@ export class CourseRepository extends BaseRepository<CourseDocument> {
   async findPublishedPaginated(
     query: PaginationQueryInputDto = {},
   ): Promise<PaginatedResponse<CourseDocument>> {
-    return this.findCoursesPaginated({ isPublished: true }, query);
+    return this.paginate({ isPublished: true }, query, {
+      searchFields: ['title', 'description', 'slug'],
+      allowedSortFields: ALLOWED_COURSE_SORT_FIELDS,
+    });
   }
 
   async findAllCoursesPaginated(
     query: PaginationQueryInputDto = {},
   ): Promise<PaginatedResponse<CourseDocument>> {
-    return this.findCoursesPaginated({}, query);
-  }
-
-  private async findCoursesPaginated(
-    filter: QueryFilter<CourseDocument>,
-    query: PaginationQueryInputDto = {},
-  ): Promise<PaginatedResponse<CourseDocument>> {
-    const mongoFilter: Record<string, unknown> = { ...filter };
-    const limit = Number(query.limit) > 0 ? Number(query.limit) : 20;
-    const isCursorMode = query.mode === 'cursor' || Boolean(query.cursor);
-
-    if (query.search && query.search.trim()) {
-      const term = escapeRegex(query.search.trim());
-      mongoFilter.$or = [
-        { title: { $regex: term, $options: 'i' } },
-        { description: { $regex: term, $options: 'i' } },
-        { slug: { $regex: term, $options: 'i' } },
-      ];
-    }
-
-    if (isCursorMode) {
-      if (query.cursor && Types.ObjectId.isValid(query.cursor)) {
-        mongoFilter._id = { $lt: new Types.ObjectId(query.cursor) };
-      }
-      const items = await this.model
-        .find(mongoFilter)
-        .sort({ _id: -1 })
-        .limit(limit + 1)
-        .exec();
-
-      return createCursorPaginatedResponse(items, limit);
-    }
-
-    const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const skip = (page - 1) * limit;
-    const sortField =
-      query.sortBy && ALLOWED_COURSE_SORT_FIELDS.has(query.sortBy)
-        ? query.sortBy
-        : 'createdAt';
-    const sortDirection = query.sortOrder === 'asc' ? 1 : -1;
-    const sort: Record<string, 1 | -1> = { [sortField]: sortDirection };
-
-    const [total, data] = await Promise.all([
-      this.model.countDocuments(mongoFilter).exec(),
-      this.model.find(mongoFilter).sort(sort).skip(skip).limit(limit).exec(),
-    ]);
-
-    return createOffsetPaginatedResponse(data, total, page, limit);
+    return this.paginate({}, query, {
+      searchFields: ['title', 'description', 'slug'],
+      allowedSortFields: ALLOWED_COURSE_SORT_FIELDS,
+    });
   }
 
   async findBySlug(slug: string): Promise<CourseDocument | null> {

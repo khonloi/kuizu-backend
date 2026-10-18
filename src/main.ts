@@ -8,6 +8,7 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
+import { getAllowedCorsOrigins } from './config/cors.util';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -22,22 +23,14 @@ async function bootstrap() {
   const clientUrl =
     configService.get<string>('CLIENT_URL') || 'http://localhost:3001';
   const corsAllowedOrigins = configService.get<string>('CORS_ALLOWED_ORIGINS');
+  const isProd = configService.get<string>('NODE_ENV') === 'production';
 
   // Compute allowed CORS origins dynamically
-  const allowedOrigins: string[] = corsAllowedOrigins
-    ? corsAllowedOrigins
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean)
-    : configService.get<string>('NODE_ENV') === 'production'
-      ? [clientUrl]
-      : Array.from(
-          new Set([
-            clientUrl,
-            'http://localhost:3000',
-            'http://localhost:3001',
-          ]),
-        );
+  const allowedOrigins: string[] = getAllowedCorsOrigins(
+    corsAllowedOrigins,
+    clientUrl,
+    isProd,
+  );
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -76,7 +69,6 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   // Swagger Documentation (only in non-production or when explicitly enabled)
-  const isProd = configService.get<string>('NODE_ENV') === 'production';
   const enableSwagger = configService.get<string>('ENABLE_SWAGGER') === 'true';
 
   if (!isProd || enableSwagger) {

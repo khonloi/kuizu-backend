@@ -1,17 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { BaseRepository } from '../../../common/database';
+import { PaginatedResponse } from '../../../common/dto';
 import { User, UserDocument, SessionInfo } from '../schemas/user.schema';
-import { UpdateProfileDto } from '../dto/user.dto';
+import { UpdateProfileDto, AdminQueryUsersDto } from '../dto/user.dto';
+import { GamificationRepository } from '../../gamification/repositories';
 
 @Injectable()
 export class UserRepository extends BaseRepository<UserDocument> {
+  private readonly gamificationRepo: GamificationRepository;
+
   constructor(
     @InjectModel(User.name)
     userModel: Model<UserDocument>,
   ) {
     super(userModel);
+    this.gamificationRepo = new GamificationRepository(userModel);
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
@@ -129,16 +134,11 @@ export class UserRepository extends BaseRepository<UserDocument> {
     lastActiveDate: Date,
     streakFreezes: number,
   ): Promise<UserDocument | null> {
-    return this.findByIdAndUpdate(
+    return this.gamificationRepo.updateActivityStreak(
       userId,
-      {
-        $set: {
-          'streak.count': streakCount,
-          'streak.lastActiveDate': lastActiveDate,
-          streakFreezes,
-        },
-      },
-      { new: true },
+      streakCount,
+      lastActiveDate,
+      streakFreezes,
     );
   }
 
@@ -146,31 +146,11 @@ export class UserRepository extends BaseRepository<UserDocument> {
     userId: string,
     cost: number,
   ): Promise<UserDocument | null> {
-    return this.findOneAndUpdate(
-      {
-        _id: userId,
-        gems: { $gte: cost },
-        hearts: { $lt: 5 },
-      },
-      {
-        $set: { hearts: 5 },
-        $inc: { gems: -cost },
-      },
-      { new: true, runValidators: true },
-    );
+    return this.gamificationRepo.refillHearts(userId, cost);
   }
 
   async consumeHeart(userId: string): Promise<UserDocument | null> {
-    return this.findOneAndUpdate(
-      {
-        _id: userId,
-        hearts: { $gt: 0 },
-      },
-      {
-        $inc: { hearts: -1 },
-      },
-      { new: true, runValidators: true },
-    );
+    return this.gamificationRepo.consumeHeart(userId);
   }
 
   async buyStreakFreeze(
@@ -178,40 +158,30 @@ export class UserRepository extends BaseRepository<UserDocument> {
     cost: number,
     maxFreezes = 2,
   ): Promise<UserDocument | null> {
-    return this.findOneAndUpdate(
-      {
-        _id: userId,
-        gems: { $gte: cost },
-        streakFreezes: { $lt: maxFreezes },
-      },
-      {
-        $inc: {
-          streakFreezes: 1,
-          gems: -cost,
-        },
-      },
-      { new: true, runValidators: true },
-    );
+    return this.gamificationRepo.buyStreakFreeze(userId, cost, maxFreezes);
   }
 
   async addXp(userId: string, points: number): Promise<UserDocument | null> {
-    return this.findByIdAndUpdate(
-      userId,
-      { $inc: { xp: points } },
-      { new: true },
-    );
+    return this.gamificationRepo.addXp(userId, points);
   }
 
   async getLeaderboard(limit = 20): Promise<UserDocument[]> {
-    return this.executeQuery(
-      this.model
-        .find(
-          { isActive: true },
-          { username: 1, avatarUrl: 1, xp: 1, streak: 1, league: 1 },
-        )
-        .sort({ xp: -1 })
-        .limit(limit),
-    );
+    return this.gamificationRepo.getLeaderboard(limit);
+  }
+
+  async findPaginatedAdmin(
+    filter: QueryFilter<UserDocument> = {},
+    query: Partial<AdminQueryUsersDto> = {},
+  ): Promise<PaginatedResponse<UserDocument>> {
+    return this.paginate(filter, query, {
+      searchFields: ['email', 'username'],
+      projection: {
+        passwordHash: 0,
+        emailVerificationToken: 0,
+        passwordResetToken: 0,
+        'sessions.tokenHash': 0,
+      },
+    });
   }
 
   async findPaginatedUsers(

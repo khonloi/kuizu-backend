@@ -37,11 +37,13 @@ import {
 } from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from '../users/users.service';
+import { AUTH_CONSTANTS } from '../../common/constants';
 
-export const AUTH_COOKIE_PATH = '/api/v1/auth';
+export const AUTH_COOKIE_PATH = AUTH_CONSTANTS.AUTH_COOKIE_PATH;
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -49,24 +51,27 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly usersService: UsersService,
+    private readonly configService?: ConfigService,
   ) {}
 
   private setCookies(res: Response, accessToken: string, refreshToken: string) {
-    const isProd = process.env.NODE_ENV === 'production';
+    const isProd =
+      (this.configService?.get<string>('NODE_ENV') ?? process.env.NODE_ENV) ===
+      'production';
 
-    res.cookie('access_token', accessToken, {
+    res.cookie(AUTH_CONSTANTS.ACCESS_TOKEN_COOKIE, accessToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 mins
+      maxAge: AUTH_CONSTANTS.ACCESS_TOKEN_TTL_MS,
     });
 
-    res.cookie('refresh_token', refreshToken, {
+    res.cookie(AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE, refreshToken, {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
-      path: AUTH_COOKIE_PATH,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: AUTH_CONSTANTS.AUTH_COOKIE_PATH,
+      maxAge: AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS,
     });
   }
 

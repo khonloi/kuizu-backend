@@ -7,6 +7,23 @@ import {
   Types,
   ClientSession,
 } from 'mongoose';
+import {
+  PaginationQueryInputDto,
+  PaginatedResponse,
+  createOffsetPaginatedResponse,
+  createCursorPaginatedResponse,
+} from '../dto/pagination.dto';
+import { escapeRegex } from '../utils/regex.util';
+import { PAGINATION_CONSTANTS } from '../constants';
+
+export interface PaginateOptions<T> {
+  searchFields?: string[];
+  allowedSortFields?: Set<string> | string[];
+  defaultSortField?: string;
+  defaultSortOrder?: 'asc' | 'desc';
+  populate?: any[];
+  projection?: ProjectionType<T> | null;
+}
 
 export abstract class BaseRepository<T> {
   constructor(protected readonly model: Model<T>) {}
@@ -167,5 +184,104 @@ export abstract class BaseRepository<T> {
     } finally {
       await session.endSession();
     }
+  }
+
+  async paginate<R = T>(
+    filter: QueryFilter<T> = {},
+    query: PaginationQueryInputDto = {},
+    options: PaginateOptions<T> = {},
+  ): Promise<PaginatedResponse<R>> {
+    const mongoFilter: Record<string, unknown> = {
+      ...(filter as Record<string, unknown>),
+    };
+    const limit =
+      Number(query.limit) > 0
+        ? Number(query.limit)
+        : PAGINATION_CONSTANTS.DEFAULT_LIMIT;
+    const isCursorMode = query.mode === 'cursor' || Boolean(query.cursor);
+
+    if (
+      query.search &&
+      query.search.trim() &&
+      options.searchFields &&
+      options.searchFields.length > 0
+    ) {
+      const term = escapeRegex(query.search.trim());
+      mongoFilter.$or = options.searchFields.map((field) => ({
+        [field]: { $regex: term, $options: 'i' },
+      }));
+    }
+
+    const applyPopulate = (findQuery: any) => {
+      if (options.populate && Array.isArray(options.populate)) {
+        for (const pop of options.populate) {
+          if (Array.isArray(pop)) {
+            findQuery = findQuery.populate(...pop);
+          } else {
+            findQuery = findQuery.populate(pop);
+          }
+        }
+      }
+      return findQuery;
+    };
+
+    if (isCursorMode) {
+      if (query.cursor && Types.ObjectId.isValid(query.cursor)) {
+        mongoFilter._id = { $lt: new Types.ObjectId(query.cursor) };
+      }
+      let findQuery = this.model
+        .find(mongoFilter, options.projection)
+        .sort({ _id: -1 })
+        .limit(limit + 1);
+
+      findQuery = applyPopulate(findQuery);
+      const items = (await this.executeQuery(findQuery)) as R[];
+
+      return createCursorPaginatedResponse(
+        items as any,
+        limit,
+      ) as unknown as PaginatedResponse<R>;
+    }
+
+    const page =
+      Number(query.page) > 0
+        ? Number(query.page)
+        : PAGINATION_CONSTANTS.DEFAULT_PAGE;
+    const skip = (page - 1) * limit;
+
+    const allowedSort = options.allowedSortFields
+      ? options.allowedSortFields instanceof Set
+        ? options.allowedSortFields
+        : new Set(options.allowedSortFields)
+      : null;
+
+    const defaultSortField = options.defaultSortField || 'createdAt';
+    const sortField =
+      query.sortBy && (!allowedSort || allowedSort.has(query.sortBy))
+        ? query.sortBy
+        : defaultSortField;
+
+    const defaultDirection = options.defaultSortOrder === 'asc' ? 1 : -1;
+    const sortDirection = query.sortOrder
+      ? query.sortOrder === 'asc'
+        ? 1
+        : -1
+      : defaultDirection;
+    const sort: Record<string, 1 | -1> = { [sortField]: sortDirection };
+
+    let findQuery = this.model
+      .find(mongoFilter, options.projection)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    findQuery = applyPopulate(findQuery);
+
+    const [total, data] = await Promise.all([
+      this.model.countDocuments(mongoFilter).exec(),
+      this.executeQuery<R[]>(findQuery),
+    ]);
+
+    return createOffsetPaginatedResponse(data, total, page, limit);
   }
 }

@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  BadRequestException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { QuizDocument } from './schemas/quiz.schema';
@@ -11,6 +10,12 @@ import { CreateQuizDto, UpdateQuizDto } from './dto/quiz.dto';
 import { CreateQuestionDto } from './dto/question.dto';
 import { QuizRepository, QuestionRepository } from './repositories';
 import { PaginationQueryInputDto, PaginatedResponse } from '../../common/dto';
+import {
+  assertObjectId,
+  areObjectIdsEqual,
+  extractIdString,
+} from '../../common/utils';
+import { sanitizeQuiz } from './utils/quiz-sanitizer.util';
 
 @Injectable()
 export class QuizzesService {
@@ -28,9 +33,7 @@ export class QuizzesService {
 
     if (questionIds && questionIds.length > 0) {
       for (const id of questionIds) {
-        if (!Types.ObjectId.isValid(id)) {
-          throw new BadRequestException(`Invalid question ID: ${id}`);
-        }
+        assertObjectId(id, 'question');
         referencedStringIds.push(id);
       }
     }
@@ -38,9 +41,7 @@ export class QuizzesService {
     if (questions && questions.length > 0) {
       for (const item of questions) {
         if (typeof item === 'string') {
-          if (!Types.ObjectId.isValid(item)) {
-            throw new BadRequestException(`Invalid question ID: ${item}`);
-          }
+          assertObjectId(item, 'question');
           referencedStringIds.push(item);
         }
       }
@@ -61,11 +62,9 @@ export class QuizzesService {
       if (!existing) {
         throw new NotFoundException(`Question not found: ${id}`);
       }
-      const isOwner =
-        existing.author &&
-        ((existing.author as any)._id
-          ? String((existing.author as any)._id) === authorId
-          : String(existing.author) === authorId);
+      const isOwner = existing.author
+        ? areObjectIdsEqual(existing.author, authorId)
+        : false;
 
       if (existing.author && !isOwner) {
         throw new ForbiddenException(
@@ -127,26 +126,6 @@ export class QuizzesService {
     return this.findOne(saved._id.toString());
   }
 
-  private sanitizeQuiz(quiz: any): any {
-    if (!quiz) return quiz;
-    const quizObj =
-      typeof quiz.toObject === 'function' ? quiz.toObject() : { ...quiz };
-    if (Array.isArray(quizObj.questions)) {
-      quizObj.questions = quizObj.questions.map((q: any) => {
-        const qObj =
-          typeof q?.toObject === 'function' ? q.toObject() : { ...q };
-        if (Array.isArray(qObj.choices)) {
-          qObj.choices = qObj.choices.map((c: any) => {
-            const { isCorrect: _isCorrect, ...rest } = c;
-            return rest;
-          });
-        }
-        return qObj;
-      });
-    }
-    return quizObj;
-  }
-
   async findAll(
     includePrivate = false,
     authorId?: string,
@@ -170,11 +149,11 @@ export class QuizzesService {
 
     if (!includePrivate) {
       if (Array.isArray(result)) {
-        return result.map((q) => this.sanitizeQuiz(q));
+        return result.map((q) => sanitizeQuiz(q));
       }
       return {
         ...result,
-        data: result.data.map((q) => this.sanitizeQuiz(q)),
+        data: result.data.map((q) => sanitizeQuiz(q)),
       };
     }
     return result;
@@ -204,19 +183,15 @@ export class QuizzesService {
     requestingUser?: { id?: string; role?: string },
     sanitize = false,
   ): Promise<QuizDocument | Record<string, unknown>> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('Invalid quiz ID');
-    }
+    assertObjectId(id, 'quiz', () => new NotFoundException('Invalid quiz ID'));
     const quiz = await this.quizRepository.findByIdWithDetails(id);
     if (!quiz) {
       throw new NotFoundException('Quiz not found');
     }
 
-    const isAuthor =
-      requestingUser?.id &&
-      (quiz.author?._id
-        ? quiz.author._id.toString() === requestingUser.id
-        : quiz.author?.toString() === requestingUser.id);
+    const isAuthor = requestingUser?.id
+      ? areObjectIdsEqual(quiz.author, requestingUser.id)
+      : false;
     const isAdmin = requestingUser?.role === 'admin';
 
     if (quiz.isPublic === false && !isAuthor && !isAdmin) {
@@ -224,9 +199,23 @@ export class QuizzesService {
     }
 
     if (sanitize && !isAuthor && !isAdmin) {
-      return this.sanitizeQuiz(quiz);
+      return sanitizeQuiz(quiz);
     }
 
+    return quiz;
+  }
+
+  private async findQuizWithOwnership(
+    id: string,
+    authorId: string,
+    isAdmin: boolean,
+    action: string,
+  ): Promise<QuizDocument> {
+    const userContext = { id: authorId, role: isAdmin ? 'admin' : 'user' };
+    const quiz = await this.findOne(id, userContext);
+    if (!isAdmin && !areObjectIdsEqual(quiz.author, authorId)) {
+      throw new ForbiddenException(`Not authorized to ${action} this quiz`);
+    }
     return quiz;
   }
 
@@ -237,16 +226,12 @@ export class QuizzesService {
     isAdmin = false,
   ): Promise<QuizDocument> {
     const userContext = { id: authorId, role: isAdmin ? 'admin' : 'user' };
-    const quiz = await this.findOne(id, userContext);
-    const authorMatches =
-      quiz.author &&
-      ((quiz.author as any)._id
-        ? String((quiz.author as any)._id) === authorId
-        : (quiz.author as any).toString() === authorId);
-
-    if (!isAdmin && !authorMatches) {
-      throw new ForbiddenException('Not authorized to update this quiz');
-    }
+    const quiz = await this.findQuizWithOwnership(
+      id,
+      authorId,
+      isAdmin,
+      'update',
+    );
 
     if (dto.title !== undefined) quiz.title = dto.title;
     if (dto.description !== undefined) quiz.description = dto.description;
@@ -271,57 +256,47 @@ export class QuizzesService {
     authorId: string,
     isAdmin = false,
   ): Promise<{ success: boolean }> {
-    const userContext = { id: authorId, role: isAdmin ? 'admin' : 'user' };
-    const quiz = await this.findOne(id, userContext);
-    const authorMatches =
-      quiz.author &&
-      ((quiz.author as any)._id
-        ? String((quiz.author as any)._id) === authorId
-        : (quiz.author as any).toString() === authorId);
-
-    if (!isAdmin && !authorMatches) {
-      throw new ForbiddenException('Not authorized to delete this quiz');
-    }
+    const quiz = await this.findQuizWithOwnership(
+      id,
+      authorId,
+      isAdmin,
+      'delete',
+    );
 
     if (
       quiz.questions &&
       Array.isArray(quiz.questions) &&
       quiz.questions.length > 0
     ) {
-      const questionIds = quiz.questions.map((q: any) =>
-        q?._id ? q._id.toString() : q.toString(),
-      );
-      if (
-        typeof (this.quizRepository as any).find === 'function' &&
-        typeof (this.questionRepository as any).deleteMany === 'function'
-      ) {
-        const otherQuizzes = await this.quizRepository.find({
-          _id: { $ne: quiz._id },
-          questions: {
-            $in: questionIds
-              .filter((qid: string) => Types.ObjectId.isValid(qid))
-              .map((qid: string) => new Types.ObjectId(qid)),
-          },
-        });
-        const retainedSet = new Set<string>();
-        for (const oq of otherQuizzes) {
-          if (oq.questions) {
-            for (const q of oq.questions) {
-              const qIdStr = ((q as any)?._id ?? q)?.toString();
-              if (qIdStr) {
-                retainedSet.add(qIdStr);
-              }
+      const questionIds = quiz.questions
+        .map((q: any) => extractIdString(q))
+        .filter((qid): qid is string => Boolean(qid));
+      const otherQuizzes = await this.quizRepository.find({
+        _id: { $ne: quiz._id },
+        questions: {
+          $in: questionIds
+            .filter((qid: string) => Types.ObjectId.isValid(qid))
+            .map((qid: string) => new Types.ObjectId(qid)),
+        },
+      });
+      const retainedSet = new Set<string>();
+      for (const oq of otherQuizzes) {
+        if (oq.questions) {
+          for (const q of oq.questions) {
+            const qIdStr = extractIdString(q);
+            if (qIdStr) {
+              retainedSet.add(qIdStr);
             }
           }
         }
-        const orphanedIds = questionIds.filter(
-          (qid: string) => !retainedSet.has(qid) && Types.ObjectId.isValid(qid),
-        );
-        if (orphanedIds.length > 0) {
-          await this.questionRepository.deleteMany({
-            _id: { $in: orphanedIds.map((qid) => new Types.ObjectId(qid)) },
-          });
-        }
+      }
+      const orphanedIds = questionIds.filter(
+        (qid: string) => !retainedSet.has(qid) && Types.ObjectId.isValid(qid),
+      );
+      if (orphanedIds.length > 0) {
+        await this.questionRepository.deleteMany({
+          _id: { $in: orphanedIds.map((qid) => new Types.ObjectId(qid)) },
+        });
       }
     }
 

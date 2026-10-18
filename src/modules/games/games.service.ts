@@ -137,10 +137,7 @@ export class GamesService {
     }
 
     const existingSession = this.gameStateStore.getSessionByHost(hostSocketId);
-    if (
-      existingSession &&
-      typeof (this.gameStateStore as any).removeSession === 'function'
-    ) {
+    if (existingSession) {
       this.gameStateStore.removeSession(existingSession.pin);
     }
 

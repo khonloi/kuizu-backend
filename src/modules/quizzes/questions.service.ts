@@ -8,6 +8,8 @@ import { QuestionDocument, QuizChoice } from './schemas/question.schema';
 import { CreateQuestionDto, UpdateQuestionDto } from './dto/question.dto';
 import { QuestionRepository } from './repositories';
 import { escapeRegex } from '../../common/utils/regex.util';
+import { assertObjectId, areObjectIdsEqual } from '../../common/utils';
+import { sanitizeQuestion } from './utils/quiz-sanitizer.util';
 
 @Injectable()
 export class QuestionsService {
@@ -21,21 +23,6 @@ export class QuestionsService {
       ...dto,
       author: new Types.ObjectId(authorId),
     });
-  }
-
-  private sanitizeQuestion(question: any): any {
-    if (!question) return question;
-    const qObj =
-      typeof question.toObject === 'function'
-        ? question.toObject()
-        : { ...question };
-    if (Array.isArray(qObj.choices)) {
-      qObj.choices = qObj.choices.map((c: any) => {
-        const { isCorrect: _isCorrect, ...rest } = c;
-        return rest;
-      });
-    }
-    return qObj;
   }
 
   async findAll(
@@ -76,7 +63,7 @@ export class QuestionsService {
       (requestingUser?.id && filterOptions?.authorId === requestingUser.id);
 
     if (!isPrivileged) {
-      return questions.map((q) => this.sanitizeQuestion(q));
+      return questions.map((q) => sanitizeQuestion(q));
     }
 
     return questions;
@@ -86,26 +73,42 @@ export class QuestionsService {
     id: string,
     requestingUser?: { id?: string; role?: string },
   ): Promise<QuestionDocument | Record<string, unknown>> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new NotFoundException('Invalid question ID');
-    }
+    assertObjectId(
+      id,
+      'question',
+      () => new NotFoundException('Invalid question ID'),
+    );
     const question = await this.questionRepository.findByIdWithDetails(id);
 
     if (!question) {
       throw new NotFoundException('Question not found');
     }
 
-    const isAuthor =
-      requestingUser?.id &&
-      (question.author?._id
-        ? question.author._id.toString() === requestingUser.id
-        : question.author?.toString() === requestingUser.id);
+    const isAuthor = requestingUser?.id
+      ? areObjectIdsEqual(question.author, requestingUser.id)
+      : false;
     const isAdmin = requestingUser?.role === 'admin';
 
     if (!isAuthor && !isAdmin) {
-      return this.sanitizeQuestion(question);
+      return sanitizeQuestion(question);
     }
 
+    return question;
+  }
+
+  private async findQuestionWithOwnership(
+    id: string,
+    authorId: string,
+    isAdmin: boolean,
+    action: string,
+  ): Promise<QuestionDocument> {
+    const question = await this.questionRepository.findByIdWithDetails(id);
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+    if (!isAdmin && !areObjectIdsEqual(question.author, authorId)) {
+      throw new ForbiddenException(`Not authorized to ${action} this question`);
+    }
     return question;
   }
 
@@ -115,20 +118,12 @@ export class QuestionsService {
     dto: UpdateQuestionDto,
     isAdmin = false,
   ): Promise<QuestionDocument> {
-    const question = await this.questionRepository.findByIdWithDetails(id);
-    if (!question) {
-      throw new NotFoundException('Question not found');
-    }
-
-    const authorMatches =
-      question.author &&
-      ((question.author as any)._id
-        ? String((question.author as any)._id) === authorId
-        : (question.author as any).toString() === authorId);
-
-    if (!isAdmin && !authorMatches) {
-      throw new ForbiddenException('Not authorized to update this question');
-    }
+    const question = await this.findQuestionWithOwnership(
+      id,
+      authorId,
+      isAdmin,
+      'update',
+    );
 
     if (dto.questionText !== undefined)
       question.questionText = dto.questionText;
@@ -150,21 +145,7 @@ export class QuestionsService {
     authorId: string,
     isAdmin = false,
   ): Promise<{ success: boolean }> {
-    const question = await this.questionRepository.findByIdWithDetails(id);
-    if (!question) {
-      throw new NotFoundException('Question not found');
-    }
-
-    const authorMatches =
-      question.author &&
-      ((question.author as any)._id
-        ? String((question.author as any)._id) === authorId
-        : (question.author as any).toString() === authorId);
-
-    if (!isAdmin && !authorMatches) {
-      throw new ForbiddenException('Not authorized to delete this question');
-    }
-
+    await this.findQuestionWithOwnership(id, authorId, isAdmin, 'delete');
     await this.questionRepository.findByIdAndDelete(id);
     return { success: true };
   }

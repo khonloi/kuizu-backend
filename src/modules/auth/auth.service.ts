@@ -9,11 +9,10 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcryptjs';
-import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { JobsProducerService } from '../jobs/jobs-producer.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { TokenService, PasswordService } from './services';
 import {
   RegisterDto,
   LoginDto,
@@ -23,10 +22,13 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/auth.dto';
+import { AUTH_CONSTANTS } from '../../common/constants';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly tokenService: TokenService;
+  private readonly passwordService: PasswordService;
 
   constructor(
     private readonly usersService: UsersService,
@@ -34,7 +36,13 @@ export class AuthService {
     private readonly configService: ConfigService,
     @Optional() private readonly jobsProducerService?: JobsProducerService,
     @Optional() private readonly redisService?: RedisService,
-  ) {}
+    @Optional() tokenService?: TokenService,
+    @Optional() passwordService?: PasswordService,
+  ) {
+    this.tokenService =
+      tokenService ?? new TokenService(this.jwtService, this.configService);
+    this.passwordService = passwordService ?? new PasswordService();
+  }
 
   async register(
     dto: RegisterDto,
@@ -52,10 +60,12 @@ export class AuthService {
       throw new ConflictException('Username already taken');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const passwordHash = await this.passwordService.hashPassword(dto.password);
+    const verificationToken = this.passwordService.generateSecureToken(32);
     const hashedVerificationToken = this.hashToken(verificationToken);
-    const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const emailVerificationExpires = new Date(
+      Date.now() + AUTH_CONSTANTS.EMAIL_VERIFICATION_TTL_MS,
+    ); // 24 hours
 
     const user = await this.usersService.create({
       email: dto.email.toLowerCase(),
@@ -76,7 +86,9 @@ export class AuthService {
     );
 
     const tokenHash = this.hashToken(tokens.refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS,
+    );
     await this.usersService.addSession(user._id.toString(), {
       sessionId: tokens.sessionId,
       tokenHash,
@@ -101,19 +113,7 @@ export class AuthService {
     }
 
     const response: Record<string, any> = {
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        isActive: user.isActive ?? true,
-        isEmailVerified: user.isEmailVerified ?? false,
-        xp: user.xp,
-        streak: user.streak,
-        hearts: user.hearts,
-        gems: user.gems,
-        league: user.league,
-      },
+      user: this.mapAuthUserResponse(user),
       ...tokens,
     };
 
@@ -122,6 +122,22 @@ export class AuthService {
     }
 
     return response;
+  }
+
+  private mapAuthUserResponse(user: any) {
+    return {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive ?? true,
+      isEmailVerified: user.isEmailVerified ?? false,
+      xp: user.xp,
+      streak: user.streak,
+      hearts: user.hearts,
+      gems: user.gems,
+      league: user.league,
+    };
   }
 
   async login(
@@ -137,7 +153,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
+    const isMatch = await this.passwordService.comparePassword(
+      dto.password,
+      user.passwordHash,
+    );
     if (!isMatch) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -156,7 +175,9 @@ export class AuthService {
     );
 
     const tokenHash = this.hashToken(tokens.refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(
+      Date.now() + AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS,
+    );
     await this.usersService.addSession(user._id.toString(), {
       sessionId: tokens.sessionId,
       tokenHash,
@@ -167,19 +188,7 @@ export class AuthService {
     });
 
     return {
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        role: user.role,
-        isActive: user.isActive ?? true,
-        isEmailVerified: user.isEmailVerified ?? false,
-        xp: user.xp,
-        streak: user.streak,
-        hearts: user.hearts,
-        gems: user.gems,
-        league: user.league,
-      },
+      user: this.mapAuthUserResponse(user),
       ...tokens,
     };
   }
@@ -237,7 +246,7 @@ export class AuthService {
       }
 
       // Rotate session and tokens
-      const newSessionId = crypto.randomUUID();
+      const newSessionId = this.passwordService.generateSecureToken(16);
       const tokens = this.generateTokens(
         user._id.toString(),
         user.email,
@@ -247,7 +256,9 @@ export class AuthService {
       );
 
       const newTokenHash = this.hashToken(tokens.refreshToken);
-      const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const newExpiresAt = new Date(
+        Date.now() + AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS,
+      );
 
       const rotated = await this.usersService.rotateSession(userId, sessionId, {
         sessionId: newSessionId,
@@ -280,7 +291,7 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const isMatch = await bcrypt.compare(
+    const isMatch = await this.passwordService.comparePassword(
       dto.currentPassword,
       user.passwordHash,
     );
@@ -288,7 +299,9 @@ export class AuthService {
       throw new UnauthorizedException('Incorrect current password');
     }
 
-    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
+    const newPasswordHash = await this.passwordService.hashPassword(
+      dto.newPassword,
+    );
     await this.usersService.updatePassword(userId, newPasswordHash);
     await this.usersService.removeAllSessions(userId);
 
@@ -337,9 +350,11 @@ export class AuthService {
       };
     }
 
-    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationToken = this.passwordService.generateSecureToken(32);
     const hashedToken = this.hashToken(verificationToken);
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expires = new Date(
+      Date.now() + AUTH_CONSTANTS.EMAIL_VERIFICATION_TTL_MS,
+    );
     await this.usersService.setEmailVerificationToken(
       user._id.toString(),
       hashedToken,
@@ -380,9 +395,9 @@ export class AuthService {
       };
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = this.passwordService.generateSecureToken(32);
     const hashedToken = this.hashToken(resetToken);
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expires = new Date(Date.now() + AUTH_CONSTANTS.PASSWORD_RESET_TTL_MS); // 1 hour
     await this.usersService.setPasswordResetToken(
       user._id.toString(),
       hashedToken,
@@ -425,7 +440,9 @@ export class AuthService {
       throw new BadRequestException('Password reset token has expired');
     }
 
-    const newPasswordHash = await bcrypt.hash(dto.newPassword, 12);
+    const newPasswordHash = await this.passwordService.hashPassword(
+      dto.newPassword,
+    );
     await this.usersService.resetPassword(user._id.toString(), newPasswordHash);
     await this.usersService.removeAllSessions(user._id.toString());
 
@@ -437,30 +454,25 @@ export class AuthService {
 
   async logout(userId: string, refreshToken?: string, accessToken?: string) {
     if (refreshToken) {
-      try {
-        const payload = this.jwtService.decode(refreshToken) as any;
-        const sessionId = payload?.jti || payload?.sid;
-        if (sessionId) {
-          await this.usersService.removeSession(userId, sessionId);
-          if (this.redisService) {
-            await this.redisService.set(
-              `token:revoked:session:${sessionId}`,
-              'true',
-              900,
-            );
-          }
-          if (accessToken && this.redisService) {
-            const accessHash = this.hashToken(accessToken);
-            await this.redisService.set(
-              `token:revoked:${accessHash}`,
-              'true',
-              900,
-            );
-          }
-          return { success: true, message: 'Logged out of current session' };
+      const sessionId = this.tokenService.extractSessionId(refreshToken);
+      if (sessionId) {
+        await this.usersService.removeSession(userId, sessionId);
+        if (this.redisService) {
+          await this.redisService.set(
+            `token:revoked:session:${sessionId}`,
+            'true',
+            900,
+          );
         }
-      } catch {
-        // decode failure falls through
+        if (accessToken && this.redisService) {
+          const accessHash = this.hashToken(accessToken);
+          await this.redisService.set(
+            `token:revoked:${accessHash}`,
+            'true',
+            900,
+          );
+        }
+        return { success: true, message: 'Logged out of current session' };
       }
     }
     if (accessToken && this.redisService) {
@@ -471,15 +483,9 @@ export class AuthService {
   }
 
   async getSessions(userId: string, currentRefreshToken?: string) {
-    let currentSessionId: string | null = null;
-    if (currentRefreshToken) {
-      try {
-        const payload = this.jwtService.decode(currentRefreshToken) as any;
-        currentSessionId = payload?.jti || payload?.sid || null;
-      } catch {
-        // ignore invalid token decode
-      }
-    }
+    const currentSessionId = currentRefreshToken
+      ? this.tokenService.extractSessionId(currentRefreshToken)
+      : null;
 
     const sessions = await this.usersService.getSessions(userId);
     return sessions.map((s) => ({
@@ -505,13 +511,8 @@ export class AuthService {
   }
 
   async revokeOtherSessions(userId: string, currentRefreshToken: string) {
-    let currentSessionId: string | null = null;
-    try {
-      const payload = this.jwtService.decode(currentRefreshToken) as any;
-      currentSessionId = payload?.jti || payload?.sid || null;
-    } catch {
-      // ignore
-    }
+    const currentSessionId =
+      this.tokenService.extractSessionId(currentRefreshToken);
 
     if (!currentSessionId) {
       throw new BadRequestException('Could not identify current session');
@@ -540,7 +541,7 @@ export class AuthService {
   }
 
   private hashToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
+    return this.tokenService.hashToken(token);
   }
 
   private generateTokens(
@@ -550,31 +551,12 @@ export class AuthService {
     role: string,
     sessionId?: string,
   ) {
-    const sid = sessionId || crypto.randomUUID();
-    const payload = { sub: userId, email, username, role, sid };
-    const refreshPayload = { sub: userId, email, username, role, jti: sid };
-
-    const accessSecret =
-      this.configService.get<string>('JWT_ACCESS_SECRET') ||
-      'kuizu_super_secret_access_key_2026';
-    const refreshSecret =
-      this.configService.get<string>('JWT_REFRESH_SECRET') ||
-      'kuizu_super_secret_refresh_key_2026';
-    const accessExpiresIn =
-      this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m';
-    const refreshExpiresIn =
-      this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d';
-
-    const accessToken = this.jwtService.sign(payload, {
-      secret: accessSecret,
-      expiresIn: accessExpiresIn as any,
-    });
-
-    const refreshToken = this.jwtService.sign(refreshPayload, {
-      secret: refreshSecret,
-      expiresIn: refreshExpiresIn as any,
-    });
-
-    return { accessToken, refreshToken, sessionId: sid };
+    return this.tokenService.generateTokens(
+      userId,
+      email,
+      username,
+      role,
+      sessionId,
+    );
   }
 }

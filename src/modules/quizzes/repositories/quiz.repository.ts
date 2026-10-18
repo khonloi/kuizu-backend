@@ -1,15 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, QueryFilter, Types } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { BaseRepository } from '../../../common/database';
 import { Quiz, QuizDocument } from '../schemas/quiz.schema';
 import {
   PaginationQueryInputDto,
   PaginatedResponse,
-  createOffsetPaginatedResponse,
-  createCursorPaginatedResponse,
 } from '../../../common/dto';
-import { escapeRegex } from '../../../common/utils/regex.util';
 
 const ALLOWED_QUIZ_SORT_FIELDS = new Set([
   'createdAt',
@@ -42,55 +39,14 @@ export class QuizRepository extends BaseRepository<QuizDocument> {
     filter: QueryFilter<QuizDocument> = {},
     query: PaginationQueryInputDto = {},
   ): Promise<PaginatedResponse<QuizDocument>> {
-    const mongoFilter: Record<string, unknown> = { ...filter };
-    const limit = Number(query.limit) > 0 ? Number(query.limit) : 20;
-    const isCursorMode = query.mode === 'cursor' || Boolean(query.cursor);
-
-    if (query.search && query.search.trim()) {
-      const term = escapeRegex(query.search.trim());
-      mongoFilter.$or = [
-        { title: { $regex: term, $options: 'i' } },
-        { description: { $regex: term, $options: 'i' } },
-      ];
-    }
-
-    if (isCursorMode) {
-      if (query.cursor && Types.ObjectId.isValid(query.cursor)) {
-        mongoFilter._id = { $lt: new Types.ObjectId(query.cursor) };
-      }
-      const items = await this.model
-        .find(mongoFilter)
-        .populate('author', 'username avatarUrl')
-        .populate('questions')
-        .sort({ _id: -1 })
-        .limit(limit + 1)
-        .exec();
-
-      return createCursorPaginatedResponse(items, limit);
-    }
-
-    const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const skip = (page - 1) * limit;
-    const sortField =
-      query.sortBy && ALLOWED_QUIZ_SORT_FIELDS.has(query.sortBy)
-        ? query.sortBy
-        : 'createdAt';
-    const sortDirection = query.sortOrder === 'asc' ? 1 : -1;
-    const sort: Record<string, 1 | -1> = { [sortField]: sortDirection };
-
-    const [total, data] = await Promise.all([
-      this.model.countDocuments(mongoFilter).exec(),
-      this.model
-        .find(mongoFilter)
-        .populate('author', 'username avatarUrl')
-        .populate('questions')
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-    ]);
-
-    return createOffsetPaginatedResponse(data, total, page, limit);
+    return this.paginate(filter, query, {
+      searchFields: ['title', 'description'],
+      allowedSortFields: ALLOWED_QUIZ_SORT_FIELDS,
+      populate: [
+        { path: 'author', select: 'username avatarUrl' },
+        { path: 'questions' },
+      ],
+    });
   }
 
   async findByIdWithDetails(id: string): Promise<QuizDocument | null> {

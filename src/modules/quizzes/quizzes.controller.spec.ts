@@ -144,4 +144,16 @@ describe('QuizzesController', () => {
     expect(res).toBe(mockResult);
     expect(spy).toHaveBeenCalledWith('quiz-123', 'user-id', false);
   });
+
+  it('should call cacheInvalidationService.invalidate when creating a quiz', async () => {
+    const mockCacheService = {
+      invalidate: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctrl = new QuizzesController(service, mockCacheService as any);
+    vi.spyOn(service, 'create').mockResolvedValue({ _id: '123' } as any);
+
+    await ctrl.create('u-1', { title: 'Q' } as any);
+
+    expect(mockCacheService.invalidate).toHaveBeenCalledWith('quizzes');
+  });
 });

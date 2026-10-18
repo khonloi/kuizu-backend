@@ -8,15 +8,9 @@ import {
   Body,
   Query,
   UseInterceptors,
-  Inject,
   Optional,
 } from '@nestjs/common';
-import {
-  CacheInterceptor,
-  CacheTTL,
-  CACHE_MANAGER,
-  Cache,
-} from '@nestjs/cache-manager';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 
 import {
   ApiTags,
@@ -25,7 +19,10 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
-import { RedisService } from '../../common/redis/redis.service';
+import {
+  CacheInvalidationService,
+  CacheNamespace,
+} from '../../common/cache/cache-invalidation.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -46,16 +43,23 @@ import {
 export class CoursesController {
   constructor(
     private readonly coursesService: CoursesService,
-    @Optional() @Inject(CACHE_MANAGER) private readonly cacheManager?: Cache,
-    @Optional() private readonly redisService?: RedisService,
+    @Optional()
+    private readonly cacheInvalidationService?: CacheInvalidationService,
   ) {}
 
-  private async invalidateCourseCache() {
-    if (this.redisService) {
-      await this.redisService.delPattern('*courses*');
-    } else {
-      await this.cacheManager?.clear();
-    }
+  private async invalidateCourseCache(): Promise<void> {
+    await this.cacheInvalidationService?.invalidate(CacheNamespace.COURSES);
+  }
+
+  private hasPagination(pagination?: OptionalPaginationQueryDto): boolean {
+    return Boolean(
+      pagination &&
+      (pagination.page ||
+        pagination.limit ||
+        pagination.cursor ||
+        pagination.search ||
+        pagination.mode),
+    );
   }
 
   @Public()
@@ -67,14 +71,7 @@ export class CoursesController {
     @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
     pagination?: OptionalPaginationQueryDto,
   ) {
-    if (
-      pagination &&
-      (pagination.page ||
-        pagination.limit ||
-        pagination.cursor ||
-        pagination.search ||
-        pagination.mode)
-    ) {
+    if (this.hasPagination(pagination)) {
       return this.coursesService.findAll(pagination);
     }
     return this.coursesService.findAll();
@@ -90,14 +87,7 @@ export class CoursesController {
     @Query(new ZodValidationPipe(optionalPaginationQuerySchema))
     pagination?: OptionalPaginationQueryDto,
   ) {
-    if (
-      pagination &&
-      (pagination.page ||
-        pagination.limit ||
-        pagination.cursor ||
-        pagination.search ||
-        pagination.mode)
-    ) {
+    if (this.hasPagination(pagination)) {
       return this.coursesService.findAllAdmin(pagination);
     }
     return this.coursesService.findAllAdmin();

@@ -3,13 +3,12 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { Types } from 'mongoose';
 import { User, UserDocument, SessionInfo } from './schemas/user.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
-import { createOffsetPaginatedResponse } from '../../common/dto';
-import { escapeRegex } from '../../common/utils/regex.util';
+import { assertObjectId } from '../../common/utils';
+import { GAMIFICATION_CONSTANTS } from '../../common/constants';
 
 @Injectable()
 export class UsersService {
@@ -57,9 +56,11 @@ export class UsersService {
   }
 
   async getPublicProfile(userId: string) {
-    if (!Types.ObjectId.isValid(userId)) {
-      throw new NotFoundException('User not found');
-    }
+    assertObjectId(
+      userId,
+      'user',
+      () => new NotFoundException('User not found'),
+    );
     const user = await this.findById(userId);
     if (!user || user.isActive === false) {
       throw new NotFoundException('User not found');
@@ -177,7 +178,10 @@ export class UsersService {
     return this.gamificationService.recordActivity(userId);
   }
 
-  async refillHearts(userId: string, cost = 50) {
+  async refillHearts(
+    userId: string,
+    cost: number = GAMIFICATION_CONSTANTS.HEART_REFILL_COST,
+  ) {
     return this.gamificationService.refillHearts(userId, cost);
   }
 
@@ -185,7 +189,11 @@ export class UsersService {
     return this.gamificationService.consumeHeart(userId);
   }
 
-  async buyStreakFreeze(userId: string, cost = 100, maxFreezes = 2) {
+  async buyStreakFreeze(
+    userId: string,
+    cost: number = GAMIFICATION_CONSTANTS.STREAK_FREEZE_COST,
+    maxFreezes: number = GAMIFICATION_CONSTANTS.MAX_STREAK_FREEZES,
+  ) {
     return this.gamificationService.buyStreakFreeze(userId, cost, maxFreezes);
   }
 
@@ -193,7 +201,9 @@ export class UsersService {
     return this.gamificationService.addXp(userId, points);
   }
 
-  async getLeaderboard(limit = 20) {
+  async getLeaderboard(
+    limit: number = GAMIFICATION_CONSTANTS.DEFAULT_LEADERBOARD_LIMIT,
+  ) {
     return this.gamificationService.getLeaderboard(limit);
   }
 
@@ -209,24 +219,7 @@ export class UsersService {
       filter.isActive = query.isActive;
     }
 
-    if (query.search) {
-      const escaped = escapeRegex(query.search.trim());
-      filter.$or = [
-        { email: { $regex: escaped, $options: 'i' } },
-        { username: { $regex: escaped, $options: 'i' } },
-      ];
-    }
-
-    const page = query.page || 1;
-    const limit = query.limit || 20;
-    const skip = (page - 1) * limit;
-
-    const [total, users] = await Promise.all([
-      this.userRepository.countUsers(filter),
-      this.userRepository.findPaginatedUsers(filter, skip, limit),
-    ]);
-
-    return createOffsetPaginatedResponse(users, total, page, limit);
+    return this.userRepository.findPaginatedAdmin(filter, query);
   }
 
   async findAdminUserById(id: string): Promise<UserDocument> {

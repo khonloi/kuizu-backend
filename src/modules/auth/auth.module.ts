@@ -7,6 +7,7 @@ import { JobsModule } from '../jobs/jobs.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { TokenService, PasswordService } from './services';
 
 @Module({
   imports: [
@@ -28,7 +29,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtStrategy, PassportModule, JwtModule],
+  providers: [AuthService, JwtStrategy, TokenService, PasswordService],
+  exports: [
+    AuthService,
+    JwtStrategy,
+    TokenService,
+    PasswordService,
+    PassportModule,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

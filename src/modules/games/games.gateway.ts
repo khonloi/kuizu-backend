@@ -9,35 +9,25 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { z } from 'zod';
 import { GamesService } from './games.service';
+import {
+  hostCreateSchema,
+  playerJoinSchema,
+  playerAnswerSchema,
+  playerReconnectSchema,
+  parseWsPayload,
+} from './dto/ws-game.dto';
+import { WsRateLimiter } from './utils/ws-rate-limiter';
+import { getAllowedCorsOrigins } from '../../config/cors.util';
 
-const hostCreateSchema = z.object({
-  quizId: z.string().min(1, 'Quiz ID is required'),
-});
-
-const playerJoinSchema = z.object({
-  pin: z.string().regex(/^\d{6}$/, 'PIN must be a 6-digit number'),
-  nickname: z
-    .string()
-    .trim()
-    .min(1, 'Nickname cannot be empty')
-    .max(30, 'Nickname cannot exceed 30 characters'),
-});
-
-const playerAnswerSchema = z.object({
-  pin: z.string().regex(/^\d{6}$/, 'PIN must be a 6-digit number'),
-  choiceId: z.string().min(1, 'Choice ID is required'),
-});
-
-const playerReconnectSchema = z.object({
-  pin: z.string().regex(/^\d{6}$/, 'PIN must be a 6-digit number'),
-  nickname: z
-    .string()
-    .trim()
-    .min(1, 'Nickname cannot be empty')
-    .max(30, 'Nickname cannot exceed 30 characters'),
-});
+export type HostCreateResult =
+  | { success: false; message: string }
+  | {
+      success: true;
+      pin: string;
+      quizTitle: string;
+      totalQuestions: number;
+    };
 
 @WebSocketGateway({
   cors: {
@@ -46,14 +36,13 @@ const playerReconnectSchema = z.object({
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
       if (!origin) return callback(null, true);
-      const allowed = process.env.CORS_ALLOWED_ORIGINS
-        ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-        : [
-            process.env.CLIENT_URL || 'http://localhost:3001',
-            'http://localhost:3000',
-            'http://localhost:3001',
-          ];
-      if (allowed.includes(origin) || process.env.NODE_ENV !== 'production') {
+      const isProd = process.env.NODE_ENV === 'production';
+      const allowed = getAllowedCorsOrigins(
+        process.env.CORS_ALLOWED_ORIGINS,
+        process.env.CLIENT_URL,
+        isProd,
+      );
+      if (allowed.includes(origin) || !isProd) {
         return callback(null, true);
       }
       return callback(new Error('Not allowed by CORS'), false);
@@ -66,7 +55,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private readonly logger = new Logger(GamesGateway.name);
-  private failedJoinAttempts = new Map<string, number>();
+  private readonly joinRateLimiter = new WsRateLimiter(5);
 
   constructor(private readonly gamesService: GamesService) {}
 
@@ -94,7 +83,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Socket disconnected: ${client.id}`);
-    this.failedJoinAttempts.delete(client.id);
+    this.joinRateLimiter.reset(client.id);
     const result = this.gamesService.handleDisconnect(client.id);
     if (result.pin) {
       if (result.wasHost) {
@@ -114,12 +103,12 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleHostCreate(
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
-  ) {
-    const parsed = hostCreateSchema.safeParse(rawData);
+  ): Promise<HostCreateResult> {
+    const parsed = parseWsPayload(hostCreateSchema, rawData);
     if (!parsed.success) {
       return {
         success: false,
-        message: parsed.error.issues[0]?.message || 'Invalid data',
+        message: parsed.error,
       };
     }
     const data = parsed.data;
@@ -149,20 +138,19 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
-    const failedCount = this.failedJoinAttempts.get(client.id) || 0;
-    if (failedCount >= 5) {
+    if (this.joinRateLimiter.isBlocked(client.id)) {
       return {
         success: false,
         message: 'Too many failed join attempts. Please reconnect.',
       };
     }
 
-    const parsed = playerJoinSchema.safeParse(rawData);
+    const parsed = parseWsPayload(playerJoinSchema, rawData);
     if (!parsed.success) {
-      this.failedJoinAttempts.set(client.id, failedCount + 1);
+      this.joinRateLimiter.recordFailure(client.id);
       return {
         success: false,
-        message: parsed.error.issues[0]?.message || 'Invalid join parameters',
+        message: parsed.error,
       };
     }
     const data = parsed.data;
@@ -170,12 +158,12 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const res = this.gamesService.joinGame(data.pin, client.id, data.nickname);
 
     if (!res.success) {
-      this.failedJoinAttempts.set(client.id, failedCount + 1);
+      this.joinRateLimiter.recordFailure(client.id);
       return res;
     }
 
     // Reset failed counter on successful join
-    this.failedJoinAttempts.delete(client.id);
+    this.joinRateLimiter.reset(client.id);
     void client.join(`game:${data.pin}`);
 
     this.server.to(`host:${data.pin}`).emit('player:joined', {
@@ -228,14 +216,14 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
-    const parsed = playerAnswerSchema.safeParse(rawData);
+    const parsed = parseWsPayload(playerAnswerSchema, rawData);
     if (!parsed.success) {
       return {
         success: false,
         isCorrect: false,
         pointsEarned: 0,
         newScore: 0,
-        message: parsed.error.issues[0]?.message || 'Invalid answer data',
+        message: parsed.error,
       };
     }
     const data = parsed.data;
@@ -269,12 +257,11 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
-    const parsed = playerReconnectSchema.safeParse(rawData);
+    const parsed = parseWsPayload(playerReconnectSchema, rawData);
     if (!parsed.success) {
       return {
         success: false,
-        message:
-          parsed.error.issues[0]?.message || 'Invalid reconnect parameters',
+        message: parsed.error,
       };
     }
     const data = parsed.data;

@@ -4,18 +4,19 @@ import {
   BadRequestException,
   Optional,
 } from '@nestjs/common';
-import { UserRepository } from '../users/repositories';
+import { GamificationRepository } from './repositories';
 import { RedisService } from '../../common/redis/redis.service';
+import { GAMIFICATION_CONSTANTS } from '../../common/constants';
 
 @Injectable()
 export class GamificationService {
   constructor(
-    private readonly userRepository: UserRepository,
+    private readonly gamificationRepository: GamificationRepository,
     @Optional() private readonly redisService?: RedisService,
   ) {}
 
   async recordActivity(userId: string) {
-    const user = await this.userRepository.findById(userId);
+    const user = await this.gamificationRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -40,7 +41,9 @@ export class GamificationService {
       } else {
         const todayTime = new Date(todayDateString).getTime();
         const lastTime = new Date(lastDateString).getTime();
-        const diffDays = Math.round((todayTime - lastTime) / 86400000);
+        const diffDays = Math.round(
+          (todayTime - lastTime) / GAMIFICATION_CONSTANTS.MS_PER_DAY,
+        );
 
         if (diffDays === 1) {
           newCount += 1;
@@ -58,7 +61,7 @@ export class GamificationService {
       }
     }
 
-    const updatedUser = await this.userRepository.updateActivityStreak(
+    const updatedUser = await this.gamificationRepository.updateActivityStreak(
       userId,
       newCount,
       now,
@@ -72,13 +75,16 @@ export class GamificationService {
     };
   }
 
-  async refillHearts(userId: string, cost = 50) {
-    const user = await this.userRepository.findById(userId);
+  async refillHearts(
+    userId: string,
+    cost: number = GAMIFICATION_CONSTANTS.HEART_REFILL_COST,
+  ) {
+    const user = await this.gamificationRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    if (user.hearts >= 5) {
+    if (user.hearts >= GAMIFICATION_CONSTANTS.MAX_HEARTS) {
       throw new BadRequestException('Hearts are already full');
     }
 
@@ -86,7 +92,10 @@ export class GamificationService {
       throw new BadRequestException('Not enough gems to refill hearts');
     }
 
-    const updatedUser = await this.userRepository.refillHearts(userId, cost);
+    const updatedUser = await this.gamificationRepository.refillHearts(
+      userId,
+      cost,
+    );
     if (!updatedUser) {
       throw new BadRequestException(
         'Hearts could not be refilled (concurrent change or insufficient gems)',
@@ -94,14 +103,14 @@ export class GamificationService {
     }
 
     return {
-      hearts: updatedUser.hearts ?? 5,
+      hearts: updatedUser.hearts ?? GAMIFICATION_CONSTANTS.MAX_HEARTS,
       gems: updatedUser.gems ?? 0,
       message: 'Hearts successfully refilled to maximum',
     };
   }
 
   async consumeHeart(userId: string) {
-    const user = await this.userRepository.findById(userId);
+    const user = await this.gamificationRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -110,7 +119,7 @@ export class GamificationService {
       throw new BadRequestException('No hearts remaining');
     }
 
-    const updatedUser = await this.userRepository.consumeHeart(userId);
+    const updatedUser = await this.gamificationRepository.consumeHeart(userId);
     if (!updatedUser) {
       throw new BadRequestException('No hearts remaining');
     }
@@ -121,8 +130,12 @@ export class GamificationService {
     };
   }
 
-  async buyStreakFreeze(userId: string, cost = 100, maxFreezes = 2) {
-    const user = await this.userRepository.findById(userId);
+  async buyStreakFreeze(
+    userId: string,
+    cost: number = GAMIFICATION_CONSTANTS.STREAK_FREEZE_COST,
+    maxFreezes: number = GAMIFICATION_CONSTANTS.MAX_STREAK_FREEZES,
+  ) {
+    const user = await this.gamificationRepository.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -136,7 +149,7 @@ export class GamificationService {
       throw new BadRequestException('Not enough gems to buy a streak freeze');
     }
 
-    const updatedUser = await this.userRepository.buyStreakFreeze(
+    const updatedUser = await this.gamificationRepository.buyStreakFreeze(
       userId,
       cost,
       maxFreezes,
@@ -155,21 +168,23 @@ export class GamificationService {
   }
 
   async addXp(userId: string, points: number) {
-    const res = await this.userRepository.addXp(userId, points);
+    const res = await this.gamificationRepository.addXp(userId, points);
     if (this.redisService) {
       void this.redisService.delPattern('leaderboard:*');
     }
     return res;
   }
 
-  async getLeaderboard(limit = 20) {
+  async getLeaderboard(
+    limit: number = GAMIFICATION_CONSTANTS.DEFAULT_LEADERBOARD_LIMIT,
+  ) {
     const cacheKey = `leaderboard:top:${limit}`;
     if (this.redisService) {
       const cached = await this.redisService.get<any[]>(cacheKey);
       if (cached) return cached;
     }
 
-    const leaderboard = await this.userRepository.getLeaderboard(limit);
+    const leaderboard = await this.gamificationRepository.getLeaderboard(limit);
 
     if (this.redisService) {
       await this.redisService.set(cacheKey, leaderboard, 60);

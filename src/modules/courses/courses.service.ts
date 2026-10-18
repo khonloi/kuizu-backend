@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CourseDocument, Lesson } from './schemas/course.schema';
@@ -10,6 +9,7 @@ import { GamificationService } from '../gamification/gamification.service';
 import { CreateCourseDto, UpdateCourseDto } from './dto/course.dto';
 import { CourseRepository, UserProgressRepository } from './repositories';
 import { PaginationQueryInputDto, PaginatedResponse } from '../../common/dto';
+import { assertObjectId } from '../../common/utils';
 
 @Injectable()
 export class CoursesService {
@@ -49,9 +49,7 @@ export class CoursesService {
   }
 
   async findById(id: string): Promise<CourseDocument> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException(`Invalid course ID format`);
-    }
+    assertObjectId(id, 'course');
     const course = await this.courseRepository.findById(id);
     if (!course) {
       throw new NotFoundException(`Course with ID '${id}' not found`);
@@ -148,20 +146,7 @@ export class CoursesService {
       );
     }
 
-    let progress = await this.progressRepository.findByUserAndCourse(
-      userId,
-      courseSlug,
-    );
-
-    if (!progress) {
-      progress = await this.progressRepository.createProgress({
-        user: new Types.ObjectId(userId),
-        courseSlug,
-        completedLessonIds: [],
-        totalXpEarned: 0,
-        currentUnit: 1,
-      });
-    }
+    const progress = await this.getUserProgress(userId, courseSlug);
 
     const isFirstCompletion = !progress.completedLessonIds.includes(lessonId);
     const xpReward = customXp ?? targetLesson.xpReward ?? 15;

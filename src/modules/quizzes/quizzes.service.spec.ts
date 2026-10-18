@@ -20,6 +20,7 @@ describe('QuizzesService', () => {
         save: vi.fn().mockResolvedValue(true),
         ...dto,
       })),
+      find: vi.fn().mockResolvedValue([]),
       findWithDetails: vi.fn(),
       findPaginatedWithDetails: vi.fn(),
       findByIdWithDetails: vi.fn(),
@@ -34,6 +35,7 @@ describe('QuizzesService', () => {
       })),
       findByIdWithDetails: vi.fn(),
       findByIdsWithDetails: vi.fn().mockResolvedValue([]),
+      deleteMany: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     };
 
     service = new QuizzesService(
@@ -402,6 +404,30 @@ describe('QuizzesService', () => {
 
       const res = await service.delete(id, authorId, false);
       expect(res).toEqual({ success: true });
+      expect(mockQuizRepository.findByIdAndDelete).toHaveBeenCalledWith(id);
+    });
+
+    it('should delete orphaned questions when deleting a quiz', async () => {
+      const id = new Types.ObjectId().toString();
+      const authorId = new Types.ObjectId().toString();
+      const questionId = new Types.ObjectId();
+
+      const mockQuiz = {
+        _id: id,
+        author: { _id: new Types.ObjectId(authorId) },
+        isPublic: true,
+        questions: [{ _id: questionId }],
+      };
+
+      mockQuizRepository.findByIdWithDetails.mockResolvedValue(mockQuiz);
+      mockQuizRepository.find.mockResolvedValue([]);
+      mockQuizRepository.findByIdAndDelete.mockResolvedValue({ _id: id });
+
+      const res = await service.delete(id, authorId, false);
+      expect(res).toEqual({ success: true });
+      expect(mockQuestionRepository.deleteMany).toHaveBeenCalledWith({
+        _id: { $in: [questionId] },
+      });
       expect(mockQuizRepository.findByIdAndDelete).toHaveBeenCalledWith(id);
     });
   });
