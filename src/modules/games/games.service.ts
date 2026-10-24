@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import {
-  GameStateStore,
+  IGameStateStore,
   PlayerState,
   LiveGameSession,
 } from './game-state.store';
@@ -14,6 +14,7 @@ import {
 } from '../quizzes/schemas/quiz.schema';
 import { GameSessionRepository } from './repositories';
 import { JobsProducerService } from '../jobs/jobs-producer.service';
+import type { AuthUser } from '../auth/services/token.service';
 
 export interface LeaderboardEntry {
   socketId: string;
@@ -35,6 +36,11 @@ export interface GameQuestionPayload {
     text: string;
     color: string;
   }[];
+}
+
+export interface ReconnectQuestionPayload extends GameQuestionPayload {
+  remainingTime: number;
+  alreadyAnswered: boolean;
 }
 
 export type JoinGameResult =
@@ -93,14 +99,14 @@ export class GamesService {
   private readonly logger = new Logger(GamesService.name);
 
   constructor(
-    private readonly gameStateStore: GameStateStore,
+    private readonly gameStateStore: IGameStateStore,
     private readonly quizzesService: QuizzesService,
     private readonly jwtService: JwtService,
     private readonly gameSessionRepository: GameSessionRepository,
     @Optional() private readonly jobsProducerService?: JobsProducerService,
   ) {}
 
-  authenticateToken(rawToken?: string): any {
+  authenticateToken(rawToken?: string): AuthUser | null {
     if (!rawToken) return null;
     try {
       const token = rawToken.startsWith('Bearer ')
@@ -112,7 +118,7 @@ export class GamesService {
     }
   }
 
-  handleDisconnect(socketId: string) {
+  async handleDisconnect(socketId: string) {
     return this.gameStateStore.removeSocket(socketId);
   }
 
@@ -121,7 +127,10 @@ export class GamesService {
     quizId: string,
     hostUserId?: string,
   ) {
-    const quiz = (await this.quizzesService.findOne(quizId)) as QuizDocument;
+    const quiz = (await this.quizzesService.findOne(
+      quizId,
+      hostUserId ? { id: hostUserId } : undefined,
+    )) as QuizDocument;
     if (!quiz.questions || quiz.questions.length === 0) {
       throw new Error('Quiz has no questions');
     }
@@ -136,12 +145,13 @@ export class GamesService {
       throw new Error('Only the author can host a private quiz');
     }
 
-    const existingSession = this.gameStateStore.getSessionByHost(hostSocketId);
+    const existingSession =
+      await this.gameStateStore.getSessionByHost(hostSocketId);
     if (existingSession) {
-      this.gameStateStore.removeSession(existingSession.pin);
+      await this.gameStateStore.removeSession(existingSession.pin);
     }
 
-    const session = this.gameStateStore.createSession(
+    const session = await this.gameStateStore.createSession(
       hostSocketId,
       quiz._id.toString(),
       quiz.title,
@@ -160,8 +170,12 @@ export class GamesService {
     };
   }
 
-  joinGame(pin: string, socketId: string, nickname: string): JoinGameResult {
-    const result = this.gameStateStore.addPlayer(pin, socketId, nickname);
+  async joinGame(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): Promise<JoinGameResult> {
+    const result = await this.gameStateStore.addPlayer(pin, socketId, nickname);
     if (!result.success || !result.player) {
       return {
         success: false,
@@ -169,7 +183,14 @@ export class GamesService {
       };
     }
 
-    const session = this.gameStateStore.getSession(pin)!;
+    const session = await this.gameStateStore.getSession(pin);
+    if (!session) {
+      return {
+        success: false,
+        message: 'Game session not found',
+      };
+    }
+
     return {
       success: true,
       pin,
@@ -182,8 +203,12 @@ export class GamesService {
     };
   }
 
-  reconnectPlayer(pin: string, socketId: string, nickname: string) {
-    const result = this.gameStateStore.reconnectPlayer(pin, socketId, nickname);
+  async reconnectPlayer(pin: string, socketId: string, nickname: string) {
+    const result = await this.gameStateStore.reconnectPlayer(
+      pin,
+      socketId,
+      nickname,
+    );
     if (!result.success || !result.player) {
       return {
         success: false,
@@ -191,12 +216,12 @@ export class GamesService {
       };
     }
 
-    const session = this.gameStateStore.getSession(pin);
+    const session = await this.gameStateStore.getSession(pin);
     if (!session) {
       return { success: false, message: 'Game session not found' };
     }
 
-    let currentQuestionPayload: any = null;
+    let currentQuestionPayload: ReconnectQuestionPayload | null = null;
     if (session.state === 'question' && session.currentQuestionIndex >= 0) {
       const currentQuestion = session.questions[session.currentQuestionIndex];
       if (currentQuestion) {
@@ -239,8 +264,8 @@ export class GamesService {
     };
   }
 
-  startGame(hostSocketId: string): StartGameResult {
-    const session = this.gameStateStore.getSessionByHost(hostSocketId);
+  async startGame(hostSocketId: string): Promise<StartGameResult> {
+    const session = await this.gameStateStore.getSessionByHost(hostSocketId);
     if (!session) {
       return { success: false, message: 'Session not found for host' };
     }
@@ -251,7 +276,7 @@ export class GamesService {
   async nextQuestionOrFinish(
     hostSocketId: string,
   ): Promise<NextQuestionResult> {
-    const session = this.gameStateStore.getSessionByHost(hostSocketId);
+    const session = await this.gameStateStore.getSessionByHost(hostSocketId);
     if (!session) {
       return { success: false, message: 'Session not found for host' };
     }
@@ -315,13 +340,17 @@ export class GamesService {
     };
   }
 
-  recordAnswer(pin: string, socketId: string, choiceId: string) {
-    const result = this.gameStateStore.recordAnswer(pin, socketId, choiceId);
+  async recordAnswer(pin: string, socketId: string, choiceId: string) {
+    const result = await this.gameStateStore.recordAnswer(
+      pin,
+      socketId,
+      choiceId,
+    );
     let answeredCount = 0;
     let totalPlayers = 0;
 
     if (result.success) {
-      const session = this.gameStateStore.getSession(pin);
+      const session = await this.gameStateStore.getSession(pin);
       if (session) {
         answeredCount = Array.from(session.players.values()).filter(
           (p: PlayerState) => p.answeredCurrent,
@@ -337,8 +366,8 @@ export class GamesService {
     };
   }
 
-  revealQuestion(hostSocketId: string): RevealQuestionResult {
-    const session = this.gameStateStore.getSessionByHost(hostSocketId);
+  async revealQuestion(hostSocketId: string): Promise<RevealQuestionResult> {
+    const session = await this.gameStateStore.getSessionByHost(hostSocketId);
     if (!session || session.state !== 'question') {
       return { success: false, message: 'Invalid state for reveal' };
     }
@@ -348,7 +377,7 @@ export class GamesService {
     const correctChoice = currentQuestion.choices.find(
       (c: QuizChoice) => c.isCorrect,
     );
-    const leaderboard = this.gameStateStore.getLeaderboard(session.pin);
+    const leaderboard = await this.gameStateStore.getLeaderboard(session.pin);
 
     return {
       success: true,
@@ -363,7 +392,9 @@ export class GamesService {
 
   async finishGame(session: LiveGameSession) {
     session.state = 'ended';
-    const finalLeaderboard = this.gameStateStore.getLeaderboard(session.pin);
+    const finalLeaderboard = await this.gameStateStore.getLeaderboard(
+      session.pin,
+    );
     const podium = finalLeaderboard.slice(0, 3);
 
     const players = finalLeaderboard.map((p, idx) => ({
@@ -411,8 +442,11 @@ export class GamesService {
               this.logger.error('Failed to save game session history', err),
             );
         }
-      } catch (err: any) {
-        this.logger.error('Failed to save game session history', err);
+      } catch (err: unknown) {
+        this.logger.error(
+          'Failed to save game session history',
+          (err as Error)?.message || String(err),
+        );
       }
     }
 

@@ -12,13 +12,14 @@ import { getAllowedCorsOrigins } from './config/cors.util';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const configService = app.get(ConfigService);
+  const trustProxy = configService.get('TRUST_PROXY') ?? 1;
   const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.set('trust proxy', 1);
+  expressApp.set('trust proxy', trustProxy);
 
   const logger = app.get(Logger);
   app.useLogger(logger);
 
-  const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 4000;
   const clientUrl =
     configService.get<string>('CLIENT_URL') || 'http://localhost:3001';

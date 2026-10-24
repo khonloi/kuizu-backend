@@ -22,16 +22,18 @@ import {
   UpdateQuestionDto,
   updateQuestionSchema,
 } from './dto/question.dto';
-import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { OptionalAuth } from '../../common/decorators/optional-auth.decorator';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import type { AuthUser } from '../auth/services/token.service';
 
 @ApiTags('Questions')
 @Controller('questions')
 export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) {}
 
-  @Public()
+  @OptionalAuth()
   @Get()
   @ApiOperation({ summary: 'List questions from the question bank' })
   @ApiQuery({ name: 'author', required: false })
@@ -43,7 +45,7 @@ export class QuestionsController {
     @Query('tag') tag?: string,
     @Query('search') search?: string,
     @Query('difficulty') difficulty?: string,
-    @CurrentUser() user?: any,
+    @CurrentUser() user?: AuthUser,
   ) {
     return this.questionsService.findAll(
       {
@@ -69,7 +71,7 @@ export class QuestionsController {
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific question by ID' })
-  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
+  async findOne(@Param('id') id: string, @CurrentUser() user?: AuthUser) {
     return this.questionsService.findOne(id, user);
   }
 

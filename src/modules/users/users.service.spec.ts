@@ -3,11 +3,18 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
 import { UsersService } from './users.service';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
+
+vi.mock('bcryptjs', () => ({
+  compare: vi.fn(),
+  hash: vi.fn(),
+}));
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -395,7 +402,13 @@ describe('UsersService', () => {
 
   describe('deleteAccount', () => {
     it('should delete user and return success message', async () => {
+      mockUserModel.findById.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
       mockUserModel.findByIdAndDelete.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
         exec: vi.fn().mockResolvedValue(mockUser),
       });
 
@@ -406,8 +419,46 @@ describe('UsersService', () => {
       });
     });
 
-    it('should throw NotFoundException if user to delete is not found', async () => {
+    it('should verify password when provided and delete account if valid', async () => {
+      mockUserModel.findById.mockReturnValue({
+        exec: vi.fn().mockResolvedValue({
+          ...mockUser,
+          passwordHash: '$2a$10$hashedpass',
+        }),
+      });
       mockUserModel.findByIdAndDelete.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: vi.fn().mockResolvedValue(mockUser),
+      });
+
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      const result = await service.deleteAccount(
+        mockUser._id.toString(),
+        'validpass',
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw UnauthorizedException if provided password does not match', async () => {
+      mockUserModel.findById.mockReturnValue({
+        exec: vi.fn().mockResolvedValue({
+          ...mockUser,
+          passwordHash: '$2a$10$hashedpass',
+        }),
+      });
+
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
+
+      await expect(
+        service.deleteAccount(mockUser._id.toString(), 'wrongpass'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw NotFoundException if user to delete is not found', async () => {
+      mockUserModel.findById.mockReturnValue({
         exec: vi.fn().mockResolvedValue(null),
       });
 

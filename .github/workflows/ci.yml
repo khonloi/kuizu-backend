@@ -6,19 +6,26 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    name: Lint, Typecheck, and Test
+    name: Lint, Typecheck, and Test Coverage
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -30,8 +37,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Run Unit Tests
-        run: npm test
+      - name: Run Tests with Coverage
+        run: npm run test:cov
 
       - name: Build Application
         run: npm run build

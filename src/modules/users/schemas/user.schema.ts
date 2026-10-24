@@ -23,6 +23,12 @@ export class SessionInfo {
   tokenHash: string;
 
   @Prop({ default: '' })
+  familyId?: string;
+
+  @Prop({ default: '' })
+  previousTokenHash?: string;
+
+  @Prop({ default: '' })
   userAgent?: string;
 
   @Prop({ default: '' })

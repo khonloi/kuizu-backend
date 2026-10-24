@@ -205,6 +205,7 @@ describe('AuthService', () => {
 
     it('should throw UnauthorizedException if user not found', async () => {
       mockUsersService.findByUsername.mockResolvedValue(null);
+      vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
       await expect(
         service.login({
@@ -212,6 +213,11 @@ describe('AuthService', () => {
           password: 'password123',
         }),
       ).rejects.toThrow(UnauthorizedException);
+
+      expect(bcrypt.compare).toHaveBeenCalledWith(
+        'password123',
+        expect.any(String),
+      );
     });
 
     it('should throw UnauthorizedException if password does not match', async () => {
@@ -294,6 +300,73 @@ describe('AuthService', () => {
       mockUsersService.findById.mockResolvedValue(userWithSession);
 
       await expect(service.refreshToken(stolenToken)).rejects.toThrow(
+        /Refresh token reuse detected/,
+      );
+      expect(mockUsersService.removeAllSessions).toHaveBeenCalledWith(
+        'user-123',
+      );
+    });
+
+    it('should allow concurrent refresh within 10-second grace window returning same tokens', async () => {
+      const token = 'grace_window_refresh_token';
+      const tokenHash = (service as any).hashToken(token);
+      const userWithSession = {
+        ...mockUser,
+        sessions: [
+          {
+            sessionId: 'sess-grace',
+            tokenHash,
+            expiresAt: new Date(Date.now() + 86400000),
+          },
+        ],
+      };
+      mockJwtService.verify.mockReturnValue({
+        sub: 'user-123',
+        jti: 'sess-grace',
+      });
+      mockUsersService.findById.mockResolvedValue(userWithSession);
+
+      // First refresh call (rotates tokens)
+      const res1 = await service.refreshToken(token);
+      expect(res1.accessToken).toBe('mock_jwt_token');
+
+      // Second concurrent call within grace window (<10s)
+      const res2 = await service.refreshToken(token);
+      expect(res2.accessToken).toBe(res1.accessToken);
+      expect(res2.refreshToken).toBe(res1.refreshToken);
+    });
+
+    it('should detect reuse and revoke all sessions if consumed token is replayed after 10-second grace window', async () => {
+      const token = 'expired_consumed_refresh_token';
+      const tokenHash = (service as any).hashToken(token);
+      const userWithSession = {
+        ...mockUser,
+        sessions: [
+          {
+            sessionId: 'sess-expired-consumed',
+            tokenHash,
+            expiresAt: new Date(Date.now() + 86400000),
+          },
+        ],
+      };
+      mockJwtService.verify.mockReturnValue({
+        sub: 'user-123',
+        jti: 'sess-expired-consumed',
+      });
+      mockUsersService.findById.mockResolvedValue(userWithSession);
+
+      // Initial rotation
+      await service.refreshToken(token);
+
+      // Fast-forward localConsumedTokens timestamp past grace window (> 10s)
+      const consumedRecord = (service as any).localConsumedTokens.get(
+        tokenHash,
+      );
+      if (consumedRecord) {
+        consumedRecord.consumedAt = Date.now() - 15_000;
+      }
+
+      await expect(service.refreshToken(token)).rejects.toThrow(
         /Refresh token reuse detected/,
       );
       expect(mockUsersService.removeAllSessions).toHaveBeenCalledWith(

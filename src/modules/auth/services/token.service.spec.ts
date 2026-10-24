@@ -76,20 +76,11 @@ describe('TokenService', () => {
       );
     });
 
-    it('should fallback to defaults when config values are missing', () => {
+    it('should throw error when config secrets are missing', () => {
       mockConfigService.get.mockReturnValue(null);
-      const result = service.generateTokens(
-        'user-2',
-        'u2@example.com',
-        'u2',
-        'admin',
-      );
-
-      expect(result.accessToken).toBe('signed_user-2');
-      expect(mockJwtService.sign).toHaveBeenCalledWith(expect.anything(), {
-        secret: 'kuizu_super_secret_access_key_2026',
-        expiresIn: '15m',
-      });
+      expect(() =>
+        service.generateTokens('user-2', 'u2@example.com', 'u2', 'admin'),
+      ).toThrowError(/JWT secrets must be configured/);
     });
   });
 

@@ -17,15 +17,21 @@ import { TokenService, PasswordService } from './services';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_ACCESS_SECRET') ||
-          'kuizu_super_secret_access_key_2026',
-        signOptions: {
-          expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRATION') ||
-            '15m') as any,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_ACCESS_SECRET');
+        if (!secret) {
+          throw new Error(
+            'JWT_ACCESS_SECRET must be configured in environment',
+          );
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRATION') ||
+              '15m') as any,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

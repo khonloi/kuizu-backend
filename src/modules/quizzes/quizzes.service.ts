@@ -269,7 +269,7 @@ export class QuizzesService {
       quiz.questions.length > 0
     ) {
       const questionIds = quiz.questions
-        .map((q: any) => extractIdString(q))
+        .map((q: unknown) => extractIdString(q))
         .filter((qid): qid is string => Boolean(qid));
       const otherQuizzes = await this.quizRepository.find({
         _id: { $ne: quiz._id },

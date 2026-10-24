@@ -24,11 +24,34 @@ import {
 } from './dto/auth.dto';
 import { AUTH_CONSTANTS } from '../../common/constants';
 
+export interface AuthUserResponse {
+  id: unknown;
+  email: string;
+  username: string;
+  role: string;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  xp: number;
+  streak?: unknown;
+  hearts: number;
+  gems: number;
+  league: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly tokenService: TokenService;
   private readonly passwordService: PasswordService;
+  private readonly localConsumedTokens = new Map<
+    string,
+    {
+      userId: string;
+      familyId?: string;
+      consumedAt: number;
+      tokens: { accessToken: string; refreshToken: string };
+    }
+  >();
 
   constructor(
     private readonly usersService: UsersService,
@@ -91,6 +114,7 @@ export class AuthService {
     );
     await this.usersService.addSession(user._id.toString(), {
       sessionId: tokens.sessionId,
+      familyId: tokens.familyId,
       tokenHash,
       userAgent: clientMeta?.userAgent,
       ipAddress: clientMeta?.ipAddress,
@@ -112,7 +136,14 @@ export class AuthService {
         );
     }
 
-    const response: Record<string, any> = {
+    const response: {
+      user: AuthUserResponse;
+      accessToken: string;
+      refreshToken: string;
+      sessionId: string;
+      familyId?: string;
+      verificationToken?: string;
+    } = {
       user: this.mapAuthUserResponse(user),
       ...tokens,
     };
@@ -124,7 +155,19 @@ export class AuthService {
     return response;
   }
 
-  private mapAuthUserResponse(user: any) {
+  private mapAuthUserResponse(user: {
+    _id: unknown;
+    email: string;
+    username: string;
+    role: string;
+    isActive?: boolean;
+    isEmailVerified?: boolean;
+    xp: number;
+    streak?: unknown;
+    hearts: number;
+    gems: number;
+    league: string;
+  }): AuthUserResponse {
     return {
       id: user._id,
       email: user.email,
@@ -150,6 +193,10 @@ export class AuthService {
       : await this.usersService.findByUsername(dto.emailOrUsername);
 
     if (!user) {
+      await this.passwordService.comparePassword(
+        dto.password,
+        AUTH_CONSTANTS.DUMMY_BCRYPT_HASH,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -180,6 +227,7 @@ export class AuthService {
     );
     await this.usersService.addSession(user._id.toString(), {
       sessionId: tokens.sessionId,
+      familyId: tokens.familyId,
       tokenHash,
       userAgent: clientMeta?.userAgent,
       ipAddress: clientMeta?.ipAddress,
@@ -203,14 +251,63 @@ export class AuthService {
 
     try {
       const refreshSecret =
-        this.configService.get<string>('JWT_REFRESH_SECRET') ||
-        'kuizu_super_secret_refresh_key_2026';
+        this.configService.get<string>('JWT_REFRESH_SECRET');
+      if (!refreshSecret) {
+        throw new Error('JWT_REFRESH_SECRET must be configured in environment');
+      }
       const payload = this.jwtService.verify(refreshToken, {
         secret: refreshSecret,
       });
 
       const userId = payload.sub;
       const sessionId = payload.jti || payload.sid;
+      const familyIdFromPayload = payload.fid || sessionId;
+      const incomingTokenHash = this.hashToken(refreshToken);
+
+      // Check consumed token cache (distributed Redis or local fallback)
+      const consumedKey = `token:consumed:${incomingTokenHash}`;
+      const consumed = this.redisService
+        ? await this.redisService.get<{
+            userId: string;
+            familyId?: string;
+            consumedAt: number;
+            tokens: { accessToken: string; refreshToken: string };
+          }>(consumedKey)
+        : this.localConsumedTokens.get(incomingTokenHash);
+
+      if (consumed) {
+        const GRACE_WINDOW_MS = 10_000;
+        const elapsed = Date.now() - consumed.consumedAt;
+        if (elapsed <= GRACE_WINDOW_MS) {
+          // Concurrent request within grace window: return the already issued token pair
+          return {
+            accessToken: consumed.tokens.accessToken,
+            refreshToken: consumed.tokens.refreshToken,
+          };
+        } else {
+          // Replayed token outside grace window: token reuse detected!
+          const targetUserId = consumed.userId || userId;
+          await this.usersService.removeAllSessions(targetUserId);
+          const ttl = this.getRevocationTtlSeconds();
+          if (this.redisService) {
+            await this.redisService.set(
+              `token:revoked:user:${targetUserId}`,
+              'true',
+              ttl,
+            );
+            if (consumed.familyId) {
+              await this.redisService.set(
+                `token:revoked:family:${consumed.familyId}`,
+                'true',
+                ttl,
+              );
+            }
+          }
+          throw new UnauthorizedException(
+            'Refresh token reuse detected. All active sessions have been revoked for your security.',
+          );
+        }
+      }
 
       const user = await this.usersService.findById(userId);
       if (!user) {
@@ -223,9 +320,12 @@ export class AuthService {
         );
       }
 
-      const incomingTokenHash = this.hashToken(refreshToken);
       const sessions = user.sessions || [];
-      const existingSession = sessions.find((s) => s.sessionId === sessionId);
+      const existingSession = sessions.find(
+        (s) =>
+          s.sessionId === sessionId ||
+          (s.familyId && s.familyId === familyIdFromPayload),
+      );
 
       // Replay Detection
       if (!existingSession) {
@@ -235,24 +335,47 @@ export class AuthService {
       if (existingSession.tokenHash !== incomingTokenHash) {
         // Reuse detected! Immediate revocation of all sessions for security
         await this.usersService.removeAllSessions(userId);
+        const ttl = this.getRevocationTtlSeconds();
+        if (this.redisService) {
+          await this.redisService.set(
+            `token:revoked:user:${userId}`,
+            'true',
+            ttl,
+          );
+          if (existingSession.familyId || familyIdFromPayload) {
+            await this.redisService.set(
+              `token:revoked:family:${existingSession.familyId || familyIdFromPayload}`,
+              'true',
+              ttl,
+            );
+          }
+        }
         throw new UnauthorizedException(
           'Refresh token reuse detected. All active sessions have been revoked for your security.',
         );
       }
 
       if (existingSession.expiresAt && existingSession.expiresAt < new Date()) {
-        await this.usersService.removeSession(userId, sessionId);
+        await this.usersService.removeSession(
+          userId,
+          existingSession.sessionId,
+        );
         throw new UnauthorizedException('Refresh token has expired');
       }
 
       // Rotate session and tokens
       const newSessionId = this.passwordService.generateSecureToken(16);
+      const familyId =
+        existingSession.familyId ||
+        familyIdFromPayload ||
+        existingSession.sessionId;
       const tokens = this.generateTokens(
         user._id.toString(),
         user.email,
         user.username,
         user.role,
         newSessionId,
+        familyId,
       );
 
       const newTokenHash = this.hashToken(tokens.refreshToken);
@@ -260,17 +383,43 @@ export class AuthService {
         Date.now() + AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS,
       );
 
-      const rotated = await this.usersService.rotateSession(userId, sessionId, {
-        sessionId: newSessionId,
-        tokenHash: newTokenHash,
-        userAgent: clientMeta?.userAgent || existingSession.userAgent,
-        ipAddress: clientMeta?.ipAddress || existingSession.ipAddress,
-        expiresAt: newExpiresAt,
-        createdAt: new Date(),
-      });
+      const rotated = await this.usersService.rotateSession(
+        userId,
+        existingSession.sessionId,
+        {
+          sessionId: newSessionId,
+          familyId,
+          tokenHash: newTokenHash,
+          previousTokenHash: incomingTokenHash,
+          userAgent: clientMeta?.userAgent || existingSession.userAgent,
+          ipAddress: clientMeta?.ipAddress || existingSession.ipAddress,
+          expiresAt: newExpiresAt,
+          createdAt: new Date(),
+        },
+      );
 
       if (!rotated) {
         throw new UnauthorizedException('Invalid or revoked refresh token');
+      }
+
+      const consumedRecord = {
+        userId,
+        familyId,
+        consumedAt: Date.now(),
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        },
+      };
+
+      if (this.redisService) {
+        await this.redisService.set(
+          consumedKey,
+          consumedRecord,
+          Math.floor(AUTH_CONSTANTS.REFRESH_TOKEN_TTL_MS / 1000),
+        );
+      } else {
+        this.localConsumedTokens.set(incomingTokenHash, consumedRecord);
       }
 
       return {
@@ -452,7 +601,29 @@ export class AuthService {
     };
   }
 
+  private getRevocationTtlSeconds(): number {
+    const accessExpiration =
+      this.configService.get<string>('JWT_ACCESS_EXPIRATION') || '15m';
+    const match = /^(\d+)([smhd])$/.exec(accessExpiration.trim());
+    if (!match) return 900;
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return 900;
+    }
+  }
+
   async logout(userId: string, refreshToken?: string, accessToken?: string) {
+    const ttl = this.getRevocationTtlSeconds();
     if (refreshToken) {
       const sessionId = this.tokenService.extractSessionId(refreshToken);
       if (sessionId) {
@@ -461,7 +632,7 @@ export class AuthService {
           await this.redisService.set(
             `token:revoked:session:${sessionId}`,
             'true',
-            900,
+            ttl,
           );
         }
         if (accessToken && this.redisService) {
@@ -469,7 +640,7 @@ export class AuthService {
           await this.redisService.set(
             `token:revoked:${accessHash}`,
             'true',
-            900,
+            ttl,
           );
         }
         return { success: true, message: 'Logged out of current session' };
@@ -477,7 +648,7 @@ export class AuthService {
     }
     if (accessToken && this.redisService) {
       const accessHash = this.hashToken(accessToken);
-      await this.redisService.set(`token:revoked:${accessHash}`, 'true', 900);
+      await this.redisService.set(`token:revoked:${accessHash}`, 'true', ttl);
     }
     return { success: true, message: 'Logged out successfully' };
   }
@@ -499,12 +670,13 @@ export class AuthService {
   }
 
   async revokeSession(userId: string, sessionId: string) {
+    const ttl = this.getRevocationTtlSeconds();
     await this.usersService.removeSession(userId, sessionId);
     if (this.redisService) {
       await this.redisService.set(
         `token:revoked:session:${sessionId}`,
         'true',
-        900,
+        ttl,
       );
     }
     return { success: true, message: 'Session revoked successfully' };
@@ -526,9 +698,10 @@ export class AuthService {
   }
 
   async revokeAllSessions(userId: string) {
+    const ttl = this.getRevocationTtlSeconds();
     await this.usersService.removeAllSessions(userId);
     if (this.redisService) {
-      await this.redisService.set(`token:revoked:user:${userId}`, 'true', 900);
+      await this.redisService.set(`token:revoked:user:${userId}`, 'true', ttl);
     }
     return { success: true, message: 'All active sessions revoked' };
   }
@@ -550,6 +723,7 @@ export class AuthService {
     username: string,
     role: string,
     sessionId?: string,
+    familyId?: string,
   ) {
     return this.tokenService.generateTokens(
       userId,
@@ -557,6 +731,7 @@ export class AuthService {
       username,
       role,
       sessionId,
+      familyId,
     );
   }
 }

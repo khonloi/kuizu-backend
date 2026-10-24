@@ -48,7 +48,6 @@ export class HealthController {
         },
         api: {
           status: 'online',
-          nodeVersion: process.version,
         },
       },
     };

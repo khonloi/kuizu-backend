@@ -26,8 +26,10 @@ export class RedisHealthIndicator {
       }
 
       return indicator.up({ mode: 'redis-connected' });
-    } catch (err: any) {
-      return indicator.down({ message: err?.message || 'Redis unreachable' });
+    } catch (err: unknown) {
+      return indicator.down({
+        message: (err as Error)?.message || 'Redis unreachable',
+      });
     }
   }
 }

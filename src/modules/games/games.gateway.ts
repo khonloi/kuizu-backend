@@ -8,8 +8,9 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { GamesService } from './games.service';
+import { TokenService } from '../auth/services/token.service';
 import {
   hostCreateSchema,
   playerJoinSchema,
@@ -57,18 +58,40 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(GamesGateway.name);
   private readonly joinRateLimiter = new WsRateLimiter(5);
 
-  constructor(private readonly gamesService: GamesService) {}
+  constructor(
+    private readonly gamesService: GamesService,
+    @Optional() private readonly tokenService?: TokenService,
+  ) {}
 
-  handleConnection(client: Socket) {
-    const rawToken =
-      (client.handshake.auth?.token as string) ||
-      (client.handshake.headers?.authorization as string);
+  private extractToken(client: Socket): string | undefined {
+    if (client.handshake.auth?.token) {
+      return String(client.handshake.auth.token);
+    }
+    const authHeader = client.handshake.headers?.authorization;
+    if (authHeader) {
+      return authHeader;
+    }
+    const cookieHeader = client.handshake.headers?.cookie;
+    if (cookieHeader) {
+      const match = /(?:^|;\s*)access_token=([^;]+)/.exec(cookieHeader);
+      if (match) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return undefined;
+  }
 
-    const user = this.gamesService.authenticateToken(rawToken);
+  async handleConnection(client: Socket) {
+    const rawToken = this.extractToken(client);
+
+    const user = this.tokenService
+      ? await this.tokenService.verifyAndValidateToken(rawToken)
+      : this.gamesService.authenticateToken(rawToken);
+
     if (user) {
       client.data.user = user;
       this.logger.log(
-        `Socket authenticated: ${client.id} (user: ${user.username || user.sub})`,
+        `Socket authenticated: ${client.id} (user: ${user.username || user.id})`,
       );
     } else {
       if (rawToken) {
@@ -81,10 +104,10 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`Socket disconnected: ${client.id}`);
     this.joinRateLimiter.reset(client.id);
-    const result = this.gamesService.handleDisconnect(client.id);
+    const result = await this.gamesService.handleDisconnect(client.id);
     if (result.pin) {
       if (result.wasHost) {
         this.server.to(`game:${result.pin}`).emit('game:cancelled', {
@@ -134,7 +157,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('player:join')
-  handlePlayerJoin(
+  async handlePlayerJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
@@ -155,7 +178,11 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     const data = parsed.data;
 
-    const res = this.gamesService.joinGame(data.pin, client.id, data.nickname);
+    const res = await this.gamesService.joinGame(
+      data.pin,
+      client.id,
+      data.nickname,
+    );
 
     if (!res.success) {
       this.joinRateLimiter.recordFailure(client.id);
@@ -182,8 +209,8 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('host:start')
-  handleHostStart(@ConnectedSocket() client: Socket) {
-    const res = this.gamesService.startGame(client.id);
+  async handleHostStart(@ConnectedSocket() client: Socket) {
+    const res = await this.gamesService.startGame(client.id);
     if (!res.success) {
       return res;
     }
@@ -212,7 +239,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('player:answer')
-  handlePlayerAnswer(
+  async handlePlayerAnswer(
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
@@ -228,7 +255,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     const data = parsed.data;
 
-    const res = this.gamesService.recordAnswer(
+    const res = await this.gamesService.recordAnswer(
       data.pin,
       client.id,
       data.choiceId,
@@ -253,7 +280,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('player:reconnect')
-  handlePlayerReconnect(
+  async handlePlayerReconnect(
     @ConnectedSocket() client: Socket,
     @MessageBody() rawData: unknown,
   ) {
@@ -266,7 +293,7 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     const data = parsed.data;
 
-    const res = this.gamesService.reconnectPlayer(
+    const res = await this.gamesService.reconnectPlayer(
       data.pin,
       client.id,
       data.nickname,
@@ -287,8 +314,8 @@ export class GamesGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('host:reveal')
-  handleHostReveal(@ConnectedSocket() client: Socket) {
-    const res = this.gamesService.revealQuestion(client.id);
+  async handleHostReveal(@ConnectedSocket() client: Socket) {
+    const res = await this.gamesService.revealQuestion(client.id);
     if (!res.success) {
       return res;
     }

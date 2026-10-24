@@ -55,9 +55,9 @@ export class JobsProducerService {
           `Enqueued verification email to ${payload.to} on email-queue [corrId: ${enrichedPayload.correlationId || 'none'}]`,
         );
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.logger.warn(
-          `Failed to enqueue verification email (${err.message}). Executing in-process fallback.`,
+          `Failed to enqueue verification email (${(err as Error).message}). Executing in-process fallback.`,
         );
       }
     }
@@ -86,9 +86,9 @@ export class JobsProducerService {
           `Enqueued password reset email to ${payload.to} on email-queue [corrId: ${enrichedPayload.correlationId || 'none'}]`,
         );
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.logger.warn(
-          `Failed to enqueue password reset email (${err.message}). Executing in-process fallback.`,
+          `Failed to enqueue password reset email (${(err as Error).message}). Executing in-process fallback.`,
         );
       }
     }
@@ -113,9 +113,9 @@ export class JobsProducerService {
           `Enqueued game session report PIN: ${payload.pin} on game-reports-queue [corrId: ${enrichedPayload.correlationId || 'none'}]`,
         );
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.logger.warn(
-          `Failed to enqueue game session report (${err.message}). Executing in-process fallback.`,
+          `Failed to enqueue game session report (${(err as Error).message}). Executing in-process fallback.`,
         );
       }
     }
@@ -143,9 +143,9 @@ export class JobsProducerService {
           `Enqueued league calculation on gamification-queue [corrId: ${enrichedPayload.correlationId || 'none'}]`,
         );
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.logger.warn(
-          `Failed to enqueue league calculation (${err.message}). Executing in-process fallback.`,
+          `Failed to enqueue league calculation (${(err as Error).message}). Executing in-process fallback.`,
         );
       }
     }

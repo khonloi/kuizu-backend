@@ -30,61 +30,97 @@ export interface LiveGameSession {
 }
 
 export interface IGameStateReader {
-  getSession(pin: string): LiveGameSession | undefined;
-  getSessionByHost(hostSocketId: string): LiveGameSession | undefined;
-  getLeaderboard(pin: string): {
-    socketId: string;
-    nickname: string;
-    score: number;
-    streak: number;
-    lastAnswerScore: number;
-  }[];
+  getSession(
+    pin: string,
+  ): Promise<LiveGameSession | undefined> | LiveGameSession | undefined;
+  getSessionByHost(
+    hostSocketId: string,
+  ): Promise<LiveGameSession | undefined> | LiveGameSession | undefined;
+  getLeaderboard(pin: string):
+    | Promise<
+        {
+          socketId: string;
+          nickname: string;
+          score: number;
+          streak: number;
+          lastAnswerScore: number;
+        }[]
+      >
+    | {
+        socketId: string;
+        nickname: string;
+        score: number;
+        streak: number;
+        lastAnswerScore: number;
+      }[];
 }
 
 export interface IGameStateWriter {
-  generatePin(): string;
+  generatePin(): Promise<string> | string;
   createSession(
     hostSocketId: string,
     quizId: string,
     quizTitle: string,
     questions: QuizQuestion[],
     hostUserId?: string,
-  ): LiveGameSession;
+  ): Promise<LiveGameSession> | LiveGameSession;
   addPlayer(
     pin: string,
     socketId: string,
     nickname: string,
-  ): { success: boolean; message?: string; player?: PlayerState };
+  ):
+    | Promise<{ success: boolean; message?: string; player?: PlayerState }>
+    | { success: boolean; message?: string; player?: PlayerState };
   reconnectPlayer(
     pin: string,
     socketId: string,
     nickname: string,
-  ): { success: boolean; message?: string; player?: PlayerState };
-  cleanupInactiveSessions(maxAgeMs?: number): number;
+  ):
+    | Promise<{ success: boolean; message?: string; player?: PlayerState }>
+    | { success: boolean; message?: string; player?: PlayerState };
+  cleanupInactiveSessions(maxAgeMs?: number): Promise<number> | number;
   recordAnswer(
     pin: string,
     socketId: string,
     choiceId: string,
-  ): {
-    success: boolean;
-    isCorrect: boolean;
-    pointsEarned: number;
-    newScore: number;
-  };
-  removeSocket(socketId: string): {
-    pin?: string;
-    wasHost: boolean;
-    nickname?: string;
-  };
-  removeSession(pin: string): void;
+  ):
+    | Promise<{
+        success: boolean;
+        isCorrect: boolean;
+        pointsEarned: number;
+        newScore: number;
+      }>
+    | {
+        success: boolean;
+        isCorrect: boolean;
+        pointsEarned: number;
+        newScore: number;
+      };
+  removeSocket(socketId: string):
+    | Promise<{
+        pin?: string;
+        wasHost: boolean;
+        nickname?: string;
+      }>
+    | {
+        pin?: string;
+        wasHost: boolean;
+        nickname?: string;
+      };
+  removeSession(pin: string): Promise<void> | void;
 }
 
 export interface IGameStateStore extends IGameStateReader, IGameStateWriter {}
 
 @Injectable()
 export class GameStateStore implements IGameStateStore {
-  private sessions = new Map<string, LiveGameSession>(); // PIN -> session
-  private hostToPin = new Map<string, string>(); // hostSocketId -> PIN
+  protected sessions = new Map<string, LiveGameSession>(); // PIN -> session
+  protected hostToPin = new Map<string, string>(); // hostSocketId -> PIN
+
+  createSessionWithPin(pin: string, session: LiveGameSession): void {
+    this.sessions.set(pin, session);
+    this.hostToPin.set(session.hostSocketId, pin);
+  }
 
   generatePin(): string {
     let pin = '';

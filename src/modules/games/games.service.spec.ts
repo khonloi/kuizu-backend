@@ -137,24 +137,24 @@ describe('GamesService', () => {
       const pin = created.pin;
 
       // Join player
-      const joinRes = service.joinGame(pin, 'player-1', 'Alice') as any;
+      const joinRes = (await service.joinGame(pin, 'player-1', 'Alice')) as any;
       expect(joinRes.success).toBe(true);
       expect(joinRes.playerCount).toBe(1);
 
       // Start game
-      const startRes = service.startGame('host-1') as any;
+      const startRes = (await service.startGame('host-1')) as any;
       expect(startRes.success).toBe(true);
       expect(startRes.questionIndex).toBe(0);
       expect(startRes.payload?.questionText).toBe('1 + 1?');
 
       // Player answers
-      const ansRes = service.recordAnswer(pin, 'player-1', 'c1');
+      const ansRes = await service.recordAnswer(pin, 'player-1', 'c1');
       expect(ansRes.success).toBe(true);
       expect(ansRes.isCorrect).toBe(true);
       expect(ansRes.answeredCount).toBe(1);
 
       // Reveal
-      const revealRes = service.revealQuestion('host-1') as any;
+      const revealRes = (await service.revealQuestion('host-1')) as any;
       expect(revealRes.success).toBe(true);
       expect(revealRes.payload?.correctChoiceId).toBe('c1');
 
@@ -208,15 +208,15 @@ describe('GamesService', () => {
       );
     });
 
-    it('should return failure if host session not found for start or reveal', () => {
-      const startRes = service.startGame('unknown-host');
+    it('should return failure if host session not found for start or reveal', async () => {
+      const startRes = await service.startGame('unknown-host');
       expect(startRes.success).toBe(false);
 
-      const revealRes = service.revealQuestion('unknown-host');
+      const revealRes = await service.revealQuestion('unknown-host');
       expect(revealRes.success).toBe(false);
     });
 
-    it('should reconnect player and return current question context if during question', () => {
+    it('should reconnect player and return current question context if during question', async () => {
       const quizId = new Types.ObjectId().toString();
       const session = mockGameStateStore.createSession(
         'host-rec',
@@ -234,10 +234,10 @@ describe('GamesService', () => {
       );
 
       mockGameStateStore.addPlayer(session.pin, 'p-old', 'Bob');
-      service.startGame('host-rec');
+      await service.startGame('host-rec');
 
       // Bob reconnects with new socket 'p-new'
-      const reconn = service.reconnectPlayer(session.pin, 'p-new', 'Bob');
+      const reconn = await service.reconnectPlayer(session.pin, 'p-new', 'Bob');
       expect(reconn.success).toBe(true);
       expect(reconn.nickname).toBe('Bob');
       expect(reconn.currentQuestion).toBeDefined();

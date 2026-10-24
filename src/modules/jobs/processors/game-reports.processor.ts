@@ -72,10 +72,11 @@ export class GameReportsProcessor extends WorkerHost {
         `[GameReports] Invalid quizId ${data.quizId} for PIN: ${data.pin}${corrTag}`,
       );
       return { saved: false, pin: data.pin };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as Error;
       this.logger.error(
-        `[GameReports] Failed to persist game session ${data.pin}: ${err.message}${corrTag}`,
-        err.stack,
+        `[GameReports] Failed to persist game session ${data.pin}: ${error.message}${corrTag}`,
+        error.stack,
       );
       throw err;
     }

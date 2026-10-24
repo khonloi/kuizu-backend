@@ -23,6 +23,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { UpdateProfileDto, updateProfileSchema } from './dto/user.dto';
+import { AUTH_CONSTANTS } from '../../common/constants';
 
 @ApiTags('Users')
 @Controller('users')
@@ -52,10 +53,15 @@ export class UsersController {
   async deleteMyAccount(
     @CurrentUser('id') userId: string,
     @Res({ passthrough: true }) res: Response,
+    @Body() body: { password?: string } = {},
   ) {
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
-    return this.usersService.deleteAccount(userId);
+    res.clearCookie(AUTH_CONSTANTS.ACCESS_TOKEN_COOKIE);
+    res.clearCookie(AUTH_CONSTANTS.REFRESH_TOKEN_COOKIE, {
+      path: AUTH_CONSTANTS.AUTH_COOKIE_PATH,
+    });
+    return body?.password
+      ? this.usersService.deleteAccount(userId, body.password)
+      : this.usersService.deleteAccount(userId);
   }
 
   @ApiBearerAuth()

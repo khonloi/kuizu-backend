@@ -70,7 +70,7 @@ describe('UsersController', () => {
       const result = await controller.deleteMyAccount('u1', mockResponse);
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token');
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token', {
-        path: '/api/auth/refresh',
+        path: '/api/v1/auth',
       });
       expect(mockUsersService.deleteAccount).toHaveBeenCalledWith('u1');
       expect(result).toEqual({

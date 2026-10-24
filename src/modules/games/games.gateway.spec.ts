@@ -47,7 +47,7 @@ describe('GamesGateway', () => {
   });
 
   describe('handleConnection', () => {
-    it('should authenticate client if valid Bearer token provided', () => {
+    it('should authenticate client if valid Bearer token provided', async () => {
       const mockClient: any = {
         id: 'socket-1',
         data: {},
@@ -57,12 +57,12 @@ describe('GamesGateway', () => {
         },
       };
 
-      gateway.handleConnection(mockClient);
+      await gateway.handleConnection(mockClient);
       expect(mockClient.data.user).toBeDefined();
       expect(mockClient.data.user.username).toBe('TeacherBob');
     });
 
-    it('should allow connection without user data if no token provided', () => {
+    it('should allow connection without user data if no token provided', async () => {
       const mockClient: any = {
         id: 'socket-2',
         data: {},
@@ -72,7 +72,7 @@ describe('GamesGateway', () => {
         },
       };
 
-      gateway.handleConnection(mockClient);
+      await gateway.handleConnection(mockClient);
       expect(mockClient.data.user).toBeUndefined();
     });
   });
@@ -152,7 +152,7 @@ describe('GamesGateway', () => {
         join: vi.fn(),
       };
 
-      const joinRes = gateway.handlePlayerJoin(playerClient, {
+      const joinRes = await gateway.handlePlayerJoin(playerClient, {
         pin,
         nickname: 'Gamer',
       });
@@ -160,12 +160,12 @@ describe('GamesGateway', () => {
       expect(playerClient.join).toHaveBeenCalledWith(`game:${pin}`);
 
       // Host starts game
-      gateway.handleHostStart(hostClient);
+      await gateway.handleHostStart(hostClient);
       const session = mockGameStateStore.getSession(pin)!;
       expect(session.state).toBe('question');
 
       // Player answers
-      const ansRes = gateway.handlePlayerAnswer(playerClient, {
+      const ansRes = await gateway.handlePlayerAnswer(playerClient, {
         pin,
         choiceId: 'c1',
       });
@@ -173,7 +173,7 @@ describe('GamesGateway', () => {
       expect(ansRes.isCorrect).toBe(true);
 
       // Host reveals
-      const revealRes = gateway.handleHostReveal(hostClient);
+      const revealRes = await gateway.handleHostReveal(hostClient);
       expect(revealRes.success).toBe(true);
       expect(session.state).toBe('reveal');
 
@@ -189,24 +189,24 @@ describe('GamesGateway', () => {
       expect(endedNextRes.message).toBe('Game has already ended');
     });
 
-    it('should reject invalid join payloads', () => {
+    it('should reject invalid join payloads', async () => {
       const playerClient: any = { id: 'p-bad', join: vi.fn() };
-      const res = gateway.handlePlayerJoin(playerClient, {
+      const res = await gateway.handlePlayerJoin(playerClient, {
         pin: 'invalid-pin',
         nickname: '',
       });
       expect(res.success).toBe(false);
     });
 
-    it('should throttle player after 5 failed join attempts', () => {
+    it('should throttle player after 5 failed join attempts', async () => {
       const playerClient: any = { id: 'p-spammer', join: vi.fn() };
       for (let i = 0; i < 5; i++) {
-        gateway.handlePlayerJoin(playerClient, {
+        await gateway.handlePlayerJoin(playerClient, {
           pin: '999999',
           nickname: 'Attacker',
         });
       }
-      const throttledRes = gateway.handlePlayerJoin(playerClient, {
+      const throttledRes = await gateway.handlePlayerJoin(playerClient, {
         pin: '999999',
         nickname: 'Attacker',
       });
@@ -239,9 +239,9 @@ describe('GamesGateway', () => {
       const pin = createRes.pin;
 
       const playerClient: any = { id: 'p1', join: vi.fn() };
-      gateway.handlePlayerJoin(playerClient, { pin, nickname: 'Alice' });
+      await gateway.handlePlayerJoin(playerClient, { pin, nickname: 'Alice' });
 
-      gateway.handleHostStart(hostClient);
+      await gateway.handleHostStart(hostClient);
 
       const hostEmitter = { emit: vi.fn() };
       mockServer.to.mockImplementation((room: string) => {
@@ -249,7 +249,7 @@ describe('GamesGateway', () => {
         return { emit: vi.fn() };
       });
 
-      gateway.handlePlayerAnswer(playerClient, { pin, choiceId: 'c1' });
+      await gateway.handlePlayerAnswer(playerClient, { pin, choiceId: 'c1' });
 
       expect(hostEmitter.emit).toHaveBeenCalledWith(
         'question:all_answered',
@@ -286,12 +286,12 @@ describe('GamesGateway', () => {
       const pin = createRes.pin;
 
       const playerClient1: any = { id: 'p1', join: vi.fn() };
-      gateway.handlePlayerJoin(playerClient1, { pin, nickname: 'Alice' });
+      await gateway.handlePlayerJoin(playerClient1, { pin, nickname: 'Alice' });
 
-      gateway.handleHostStart(hostClient);
+      await gateway.handleHostStart(hostClient);
 
       // Player 1 disconnects
-      gateway.handleDisconnect(playerClient1);
+      await gateway.handleDisconnect(playerClient1);
 
       // Player 1 reconnects with new socket
       const hostEmitter = { emit: vi.fn() };
@@ -301,7 +301,7 @@ describe('GamesGateway', () => {
       });
 
       const playerClient2: any = { id: 'p1-reconnected', join: vi.fn() };
-      const reconnRes = gateway.handlePlayerReconnect(playerClient2, {
+      const reconnRes = await gateway.handlePlayerReconnect(playerClient2, {
         pin,
         nickname: 'Alice',
       });
@@ -314,9 +314,9 @@ describe('GamesGateway', () => {
       });
     });
 
-    it('should reject invalid reconnect parameters', () => {
+    it('should reject invalid reconnect parameters', async () => {
       const playerClient: any = { id: 'p-invalid', join: vi.fn() };
-      const res = gateway.handlePlayerReconnect(playerClient, {
+      const res = await gateway.handlePlayerReconnect(playerClient, {
         pin: 'invalid',
         nickname: '',
       });

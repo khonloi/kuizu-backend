@@ -31,11 +31,13 @@ import {
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { OptionalAuth } from '../../common/decorators/optional-auth.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {
   OptionalPaginationQueryDto,
   optionalPaginationQuerySchema,
 } from '../../common/dto';
+import type { AuthUser } from '../auth/services/token.service';
 
 @ApiTags('Quizzes')
 @Controller('quizzes')
@@ -105,10 +107,10 @@ export class QuizzesController {
     return this.quizzesService.findAllAdmin();
   }
 
-  @Public()
+  @OptionalAuth()
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific quiz by ID' })
-  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
+  async findOne(@Param('id') id: string, @CurrentUser() user?: AuthUser) {
     return this.quizzesService.findOne(id, user, true);
   }
 

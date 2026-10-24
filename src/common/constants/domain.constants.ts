@@ -1,5 +1,7 @@
 export const AUTH_CONSTANTS = {
   BCRYPT_SALT_ROUNDS: 12,
+  DUMMY_BCRYPT_HASH:
+    '$2a$12$e80yq9gQ7hA5l4p1f0.rLuQz/3M5L7iK1s2t3u4v5w6x7y8z9a0b1',
   ACCESS_TOKEN_COOKIE: 'access_token',
   REFRESH_TOKEN_COOKIE: 'refresh_token',
   ACCESS_TOKEN_TTL_MS: 15 * 60 * 1000, // 15 minutes

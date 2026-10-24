@@ -2,27 +2,54 @@ import { describe, it, expect } from 'vitest';
 import { validateEnv } from './env.validation';
 
 describe('validateEnv', () => {
-  it('should accept valid development configuration with default secrets', () => {
+  it('should reject development config when JWT secrets are missing', () => {
     const config = {
       NODE_ENV: 'development',
       PORT: '4000',
+    };
+
+    expect(() => validateEnv(config)).toThrowError(/JWT_ACCESS_SECRET/);
+  });
+
+  it('should accept valid development configuration with explicit secrets', () => {
+    const config = {
+      NODE_ENV: 'development',
+      PORT: '4000',
+      JWT_ACCESS_SECRET: 'my_custom_dev_access_secret_123',
+      JWT_REFRESH_SECRET: 'my_custom_dev_refresh_secret_123',
     };
 
     const validated = validateEnv(config);
     expect(validated.NODE_ENV).toBe('development');
     expect(validated.PORT).toBe(4000);
     expect(validated.CLIENT_URL).toBe('http://localhost:3001');
-    expect(validated.JWT_ACCESS_SECRET).toBeDefined();
+    expect(validated.TRUST_PROXY).toBe(1);
+    expect(validated.JWT_ACCESS_SECRET).toBe('my_custom_dev_access_secret_123');
   });
 
-  it('should allow optional CORS_ALLOWED_ORIGINS', () => {
+  it('should provide safe default secrets when NODE_ENV is test', () => {
     const config = {
-      NODE_ENV: 'development',
-      CORS_ALLOWED_ORIGINS: 'https://kuizu.app, https://admin.kuizu.app',
+      NODE_ENV: 'test',
     };
 
     const validated = validateEnv(config);
-    expect(validated.CORS_ALLOWED_ORIGINS).toBe('https://kuizu.app, https://admin.kuizu.app');
+    expect(validated.NODE_ENV).toBe('test');
+    expect(validated.JWT_ACCESS_SECRET).toBeDefined();
+    expect(validated.JWT_REFRESH_SECRET).toBeDefined();
+  });
+
+  it('should allow optional CORS_ALLOWED_ORIGINS and configurable TRUST_PROXY', () => {
+    const config = {
+      NODE_ENV: 'test',
+      CORS_ALLOWED_ORIGINS: 'https://kuizu.app, https://admin.kuizu.app',
+      TRUST_PROXY: 'loopback',
+    };
+
+    const validated = validateEnv(config);
+    expect(validated.CORS_ALLOWED_ORIGINS).toBe(
+      'https://kuizu.app, https://admin.kuizu.app',
+    );
+    expect(validated.TRUST_PROXY).toBe('loopback');
   });
 
   it('should reject production config when default insecure JWT secrets are used', () => {
@@ -51,8 +78,10 @@ describe('validateEnv', () => {
     const config = {
       NODE_ENV: 'production',
       MONGODB_URI: 'mongodb://127.0.0.1:27017/kuizu',
-      JWT_ACCESS_SECRET: 'a_very_long_and_secure_production_access_secret_key_123456',
-      JWT_REFRESH_SECRET: 'a_very_long_and_secure_production_refresh_secret_key_123456',
+      JWT_ACCESS_SECRET:
+        'a_very_long_and_secure_production_access_secret_key_123456',
+      JWT_REFRESH_SECRET:
+        'a_very_long_and_secure_production_refresh_secret_key_123456',
     };
 
     expect(() => validateEnv(config)).toThrowError(/MONGODB_URI/);
@@ -63,15 +92,20 @@ describe('validateEnv', () => {
       NODE_ENV: 'production',
       PORT: '5000',
       CLIENT_URL: 'https://kuizu.app',
-      MONGODB_URI: 'mongodb+srv://admin:secure_pwd@cluster0.mongodb.net/kuizu_prod',
-      JWT_ACCESS_SECRET: 'a_very_long_and_secure_production_access_secret_key_123456',
-      JWT_REFRESH_SECRET: 'a_very_long_and_secure_production_refresh_secret_key_123456',
+      MONGODB_URI:
+        'mongodb+srv://admin:secure_pwd@cluster0.mongodb.net/kuizu_prod',
+      JWT_ACCESS_SECRET:
+        'a_very_long_and_secure_production_access_secret_key_123456',
+      JWT_REFRESH_SECRET:
+        'a_very_long_and_secure_production_refresh_secret_key_123456',
     };
 
     const validated = validateEnv(config);
     expect(validated.NODE_ENV).toBe('production');
     expect(validated.PORT).toBe(5000);
     expect(validated.CLIENT_URL).toBe('https://kuizu.app');
-    expect(validated.JWT_ACCESS_SECRET).toBe('a_very_long_and_secure_production_access_secret_key_123456');
+    expect(validated.JWT_ACCESS_SECRET).toBe(
+      'a_very_long_and_secure_production_access_secret_key_123456',
+    );
   });
 });

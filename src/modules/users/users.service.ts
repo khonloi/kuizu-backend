@@ -2,11 +2,15 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { User, UserDocument, SessionInfo } from './schemas/user.schema';
 import { UpdateProfileDto, AdminQueryUsersDto } from './dto/user.dto';
 import { UserRepository } from './repositories';
 import { GamificationService } from '../gamification/gamification.service';
+import { RedisService } from '../../common/redis/redis.service';
 import { assertObjectId } from '../../common/utils';
 import { GAMIFICATION_CONSTANTS } from '../../common/constants';
 
@@ -15,6 +19,7 @@ export class UsersService {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly gamificationService: GamificationService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   async create(userData: Partial<User>): Promise<UserDocument> {
@@ -165,10 +170,24 @@ export class UsersService {
 
   async deleteAccount(
     userId: string,
+    password?: string,
   ): Promise<{ success: boolean; message: string }> {
-    const user = await this.userRepository.deleteAccount(userId);
-    if (!user) {
+    const existing = await this.userRepository.findById(userId);
+    if (!existing) {
       throw new NotFoundException('User not found');
+    }
+
+    if (password && existing.passwordHash) {
+      const isMatch = await bcrypt.compare(password, existing.passwordHash);
+      if (!isMatch) {
+        throw new UnauthorizedException('Incorrect password');
+      }
+    }
+
+    await this.userRepository.deleteAccount(userId);
+    await this.removeAllSessions(userId);
+    if (this.redisService) {
+      await this.redisService.set(`token:revoked:user:${userId}`, 'true', 3600);
     }
     return { success: true, message: 'Account deleted successfully' };
   }
