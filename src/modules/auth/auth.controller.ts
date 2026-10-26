@@ -91,7 +91,8 @@ export class AuthController {
     };
     const result = await this.authService.register(dto, clientMeta);
     this.setCookies(res, result.accessToken, result.refreshToken);
-    return result;
+    const { refreshToken: _omitted, ...safeResult } = result;
+    return safeResult;
   }
 
   @Public()
@@ -110,7 +111,8 @@ export class AuthController {
     };
     const result = await this.authService.login(dto, clientMeta);
     this.setCookies(res, result.accessToken, result.refreshToken);
-    return result;
+    const { refreshToken: _omitted, ...safeResult } = result;
+    return safeResult;
   }
 
   @Public()
@@ -131,7 +133,8 @@ export class AuthController {
     };
     const tokens = await this.authService.refreshToken(token, clientMeta);
     this.setCookies(res, tokens.accessToken, tokens.refreshToken);
-    return tokens;
+    const { refreshToken: _omitted, ...safeTokens } = tokens;
+    return safeTokens;
   }
 
   @ApiBearerAuth()

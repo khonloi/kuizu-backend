@@ -212,6 +212,34 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     return totalDeleted;
   }
 
+  /**
+   * Distributed Lock primitive using Redis atomic SET NX PX
+   */
+  async acquireLock(key: string, ttlMs = 3000): Promise<boolean> {
+    if (!this.client || !this.isConnected) {
+      const entry = this.memoryStore.get(key);
+      if (entry && (!entry.expiresAt || entry.expiresAt > Date.now())) {
+        return false;
+      }
+      this.memoryStore.set(key, {
+        value: '1',
+        expiresAt: Date.now() + ttlMs,
+      });
+      return true;
+    }
+
+    try {
+      const res = await this.client.set(key, '1', 'PX', ttlMs, 'NX');
+      return res === 'OK';
+    } catch {
+      return false;
+    }
+  }
+
+  async releaseLock(key: string): Promise<void> {
+    await this.del(key);
+  }
+
   private matchGlob(str: string, pattern: string): boolean {
     const escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, '\\$&')

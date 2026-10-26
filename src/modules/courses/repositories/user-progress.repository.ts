@@ -33,4 +33,45 @@ export class UserProgressRepository extends BaseRepository<UserProgressDocument>
   ): Promise<UserProgressDocument> {
     return this.create(data);
   }
+
+  async completeLessonAtomic(
+    userId: string | Types.ObjectId,
+    courseSlug: string,
+    lessonId: string,
+    xpReward: number,
+  ): Promise<{ progress: UserProgressDocument; isFirstCompletion: boolean }> {
+    const userObjectId =
+      typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
+
+    const updated = await this.findOneAndUpdate(
+      {
+        user: userObjectId,
+        courseSlug,
+        completedLessonIds: { $ne: lessonId },
+      },
+      {
+        $addToSet: { completedLessonIds: lessonId },
+        $inc: { totalXpEarned: xpReward },
+      },
+      { new: true },
+    );
+
+    if (updated) {
+      return { progress: updated, isFirstCompletion: true };
+    }
+
+    let existing = await this.findByUserAndCourse(userId, courseSlug);
+    if (!existing) {
+      existing = await this.create({
+        user: userObjectId,
+        courseSlug,
+        completedLessonIds: [lessonId],
+        totalXpEarned: xpReward,
+        currentUnit: 1,
+      });
+      return { progress: existing, isFirstCompletion: true };
+    }
+
+    return { progress: existing, isFirstCompletion: false };
+  }
 }

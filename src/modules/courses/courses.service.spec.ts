@@ -37,6 +37,7 @@ describe('CoursesService', () => {
         save: vi.fn().mockResolvedValue(true),
         ...dto,
       })),
+      completeLessonAtomic: vi.fn(),
     };
 
     mockGamificationService = {
@@ -263,18 +264,26 @@ describe('CoursesService', () => {
       };
 
       mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
-      mockProgressRepository.findByUserAndCourse.mockResolvedValue(
-        mockProgress,
-      );
+      mockProgressRepository.completeLessonAtomic.mockResolvedValue({
+        progress: {
+          ...mockProgress,
+          completedLessonIds: ['lesson-1'],
+          totalXpEarned: 25,
+        },
+        isFirstCompletion: true,
+      });
 
       const res = await service.completeLesson(userId, 'course-1', 'lesson-1');
 
       expect(res.success).toBe(true);
       expect(res.xpEarned).toBe(25);
       expect(res.alreadyCompleted).toBe(false);
-      expect(mockProgress.completedLessonIds).toContain('lesson-1');
-      expect(mockProgress.totalXpEarned).toBe(25);
-      expect(mockProgress.save).toHaveBeenCalled();
+      expect(mockProgressRepository.completeLessonAtomic).toHaveBeenCalledWith(
+        userId,
+        'course-1',
+        'lesson-1',
+        25,
+      );
       expect(mockGamificationService.addXp).toHaveBeenCalledWith(userId, 25);
     });
 
@@ -299,16 +308,16 @@ describe('CoursesService', () => {
       };
 
       mockCourseRepository.findBySlug.mockResolvedValue(mockCourse);
-      mockProgressRepository.findByUserAndCourse.mockResolvedValue(
-        mockProgress,
-      );
+      mockProgressRepository.completeLessonAtomic.mockResolvedValue({
+        progress: mockProgress,
+        isFirstCompletion: false,
+      });
 
       const res = await service.completeLesson(userId, 'course-1', 'lesson-1');
 
       expect(res.success).toBe(true);
       expect(res.xpEarned).toBe(0);
       expect(res.alreadyCompleted).toBe(true);
-      expect(mockProgress.save).not.toHaveBeenCalled();
       expect(mockGamificationService.addXp).not.toHaveBeenCalled();
     });
 

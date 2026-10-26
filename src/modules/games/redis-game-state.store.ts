@@ -138,78 +138,60 @@ export class RedisGameStateStore implements IGameStateStore {
     return this.getSession(pin);
   }
 
+  private async withPinLock<R>(pin: string, fn: () => Promise<R>): Promise<R> {
+    const lockKey = `lock:game:${pin}`;
+    let attempts = 0;
+    while (attempts < 15) {
+      const acquired = await this.redisService.acquireLock(lockKey, 3000);
+      if (acquired) {
+        try {
+          return await fn();
+        } finally {
+          await this.redisService.releaseLock(lockKey);
+        }
+      }
+      attempts++;
+      await new Promise((resolve) =>
+        setTimeout(resolve, 20 + Math.random() * 30),
+      );
+    }
+    return fn();
+  }
+
   async addPlayer(
     pin: string,
     socketId: string,
     nickname: string,
   ): Promise<{ success: boolean; message?: string; player?: PlayerState }> {
-    const session = await this.getSession(pin);
-    if (!session) {
-      return { success: false, message: 'Game PIN not found' };
-    }
-    if (session.state !== 'lobby') {
-      return { success: false, message: 'Game has already started' };
-    }
-
-    const trimmedNickname = nickname.trim();
-    for (const p of session.players.values()) {
-      if (p.nickname.toLowerCase() === trimmedNickname.toLowerCase()) {
-        return {
-          success: false,
-          message: 'Nickname already taken in this room',
-        };
+    return this.withPinLock(pin, async () => {
+      const session = await this.getSession(pin);
+      if (!session) {
+        return { success: false, message: 'Game PIN not found' };
       }
-    }
+      if (session.state !== 'lobby') {
+        return { success: false, message: 'Game has already started' };
+      }
 
-    const player: PlayerState = {
-      socketId,
-      nickname: trimmedNickname,
-      score: 0,
-      streak: 0,
-      answeredCurrent: false,
-      lastAnswerScore: 0,
-      isConnected: true,
-    };
+      const trimmedNickname = nickname.trim();
+      for (const p of session.players.values()) {
+        if (p.nickname.toLowerCase() === trimmedNickname.toLowerCase()) {
+          return {
+            success: false,
+            message: 'Nickname already taken in this room',
+          };
+        }
+      }
 
-    session.players.set(socketId, player);
-    session.lastActivityAt = Date.now();
+      const player: PlayerState = {
+        socketId,
+        nickname: trimmedNickname,
+        score: 0,
+        streak: 0,
+        answeredCurrent: false,
+        lastAnswerScore: 0,
+        isConnected: true,
+      };
 
-    await this.redisService.set(
-      `game:session:${pin}`,
-      this.serialize(session),
-      this.SESSION_TTL_SECONDS,
-    );
-    await this.redisService.set(
-      `game:socket:${socketId}`,
-      pin,
-      this.SESSION_TTL_SECONDS,
-    );
-
-    return { success: true, player };
-  }
-
-  async reconnectPlayer(
-    pin: string,
-    socketId: string,
-    nickname: string,
-  ): Promise<{ success: boolean; message?: string; player?: PlayerState }> {
-    const session = await this.getSession(pin);
-    if (!session) {
-      return { success: false, message: 'Game PIN not found' };
-    }
-    if (session.state === 'ended') {
-      return { success: false, message: 'Game has already ended' };
-    }
-
-    const targetNickname = nickname.trim().toLowerCase();
-
-    // 1. Check disconnected players
-    if (session.disconnectedPlayers?.has(targetNickname)) {
-      const player = session.disconnectedPlayers.get(targetNickname)!;
-      session.disconnectedPlayers.delete(targetNickname);
-      player.socketId = socketId;
-      player.isConnected = true;
-      delete player.disconnectedAt;
       session.players.set(socketId, player);
       session.lastActivityAt = Date.now();
 
@@ -225,19 +207,35 @@ export class RedisGameStateStore implements IGameStateStore {
       );
 
       return { success: true, player };
-    }
+    });
+  }
 
-    // 2. Check active players (e.g. quick reconnection or reconnect on reload)
-    for (const [oldSocketId, player] of session.players.entries()) {
-      if (player.nickname.toLowerCase() === targetNickname) {
-        session.players.delete(oldSocketId);
+  async reconnectPlayer(
+    pin: string,
+    socketId: string,
+    nickname: string,
+  ): Promise<{ success: boolean; message?: string; player?: PlayerState }> {
+    return this.withPinLock(pin, async () => {
+      const session = await this.getSession(pin);
+      if (!session) {
+        return { success: false, message: 'Game PIN not found' };
+      }
+      if (session.state === 'ended') {
+        return { success: false, message: 'Game has already ended' };
+      }
+
+      const targetNickname = nickname.trim().toLowerCase();
+
+      // 1. Check disconnected players
+      if (session.disconnectedPlayers?.has(targetNickname)) {
+        const player = session.disconnectedPlayers.get(targetNickname)!;
+        session.disconnectedPlayers.delete(targetNickname);
         player.socketId = socketId;
         player.isConnected = true;
         delete player.disconnectedAt;
         session.players.set(socketId, player);
         session.lastActivityAt = Date.now();
 
-        await this.redisService.del(`game:socket:${oldSocketId}`);
         await this.redisService.set(
           `game:session:${pin}`,
           this.serialize(session),
@@ -251,9 +249,35 @@ export class RedisGameStateStore implements IGameStateStore {
 
         return { success: true, player };
       }
-    }
 
-    return { success: false, message: 'Player not found in this game room' };
+      // 2. Check active players (e.g. quick reconnection or reconnect on reload)
+      for (const [oldSocketId, player] of session.players.entries()) {
+        if (player.nickname.toLowerCase() === targetNickname) {
+          session.players.delete(oldSocketId);
+          player.socketId = socketId;
+          player.isConnected = true;
+          delete player.disconnectedAt;
+          session.players.set(socketId, player);
+          session.lastActivityAt = Date.now();
+
+          await this.redisService.del(`game:socket:${oldSocketId}`);
+          await this.redisService.set(
+            `game:session:${pin}`,
+            this.serialize(session),
+            this.SESSION_TTL_SECONDS,
+          );
+          await this.redisService.set(
+            `game:socket:${socketId}`,
+            pin,
+            this.SESSION_TTL_SECONDS,
+          );
+
+          return { success: true, player };
+        }
+      }
+
+      return { success: false, message: 'Player not found in this game room' };
+    });
   }
 
   async recordAnswer(
@@ -266,99 +290,111 @@ export class RedisGameStateStore implements IGameStateStore {
     pointsEarned: number;
     newScore: number;
   }> {
-    const session = await this.getSession(pin);
-    if (!session || session.state !== 'question') {
-      return { success: false, isCorrect: false, pointsEarned: 0, newScore: 0 };
-    }
+    return this.withPinLock(pin, async () => {
+      const session = await this.getSession(pin);
+      if (!session || session.state !== 'question') {
+        return {
+          success: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          newScore: 0,
+        };
+      }
 
-    // Atomic answer lock key to prevent race conditions / duplicate answering
-    const lockKey = `game:answered:${pin}:${socketId}:${session.currentQuestionIndex}`;
-    const alreadyAnswered = await this.redisService.exists(lockKey);
-    if (alreadyAnswered) {
+      // Atomic answer lock key to prevent race conditions / duplicate answering
+      const lockKey = `game:answered:${pin}:${socketId}:${session.currentQuestionIndex}`;
+      const alreadyAnswered = await this.redisService.exists(lockKey);
+      if (alreadyAnswered) {
+        const player = session.players.get(socketId);
+        return {
+          success: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          newScore: player?.score || 0,
+        };
+      }
+
       const player = session.players.get(socketId);
-      return {
-        success: false,
-        isCorrect: false,
-        pointsEarned: 0,
-        newScore: player?.score || 0,
-      };
-    }
+      if (!player || player.answeredCurrent) {
+        return {
+          success: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          newScore: player?.score || 0,
+        };
+      }
 
-    const player = session.players.get(socketId);
-    if (!player || player.answeredCurrent) {
-      return {
-        success: false,
-        isCorrect: false,
-        pointsEarned: 0,
-        newScore: player?.score || 0,
-      };
-    }
+      // Acquire lock for this question
+      await this.redisService.set(lockKey, '1', 60);
 
-    // Acquire lock for this question
-    await this.redisService.set(lockKey, '1', 60);
+      const currentQuestion = session.questions[session.currentQuestionIndex];
+      if (!currentQuestion) {
+        return {
+          success: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          newScore: 0,
+        };
+      }
 
-    const currentQuestion = session.questions[session.currentQuestionIndex];
-    if (!currentQuestion) {
-      return { success: false, isCorrect: false, pointsEarned: 0, newScore: 0 };
-    }
+      const selectedChoice = currentQuestion.choices.find(
+        (c: QuizChoice) => c.id === choiceId,
+      );
+      const isCorrect = !!selectedChoice?.isCorrect;
 
-    const selectedChoice = currentQuestion.choices.find(
-      (c: QuizChoice) => c.id === choiceId,
-    );
-    const isCorrect = !!selectedChoice?.isCorrect;
+      const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
+      const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
 
-    const timeLimitMs = (currentQuestion.timeLimit || 20) * 1000;
-    const timeElapsed = Math.max(0, Date.now() - session.questionStartTime);
+      // If answer submitted after time limit plus 1s grace, reject with 0 points
+      if (session.questionStartTime > 0 && timeElapsed > timeLimitMs + 1000) {
+        player.answeredCurrent = true;
+        player.lastAnswerScore = 0;
+        await this.redisService.set(
+          `game:session:${pin}`,
+          this.serialize(session),
+          this.SESSION_TTL_SECONDS,
+        );
+        return {
+          success: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          newScore: player.score,
+        };
+      }
 
-    // If answer submitted after time limit plus 1s grace, reject with 0 points
-    if (session.questionStartTime > 0 && timeElapsed > timeLimitMs + 1000) {
+      let pointsEarned = 0;
+      if (isCorrect) {
+        const timeRemainingRatio = Math.max(
+          0,
+          (timeLimitMs - timeElapsed) / timeLimitMs,
+        );
+        const basePoints = currentQuestion.points || 1000;
+        const speedBonus = Math.round(basePoints * 0.5 * timeRemainingRatio);
+        const streakBonus = Math.min(player.streak * 50, 250);
+        pointsEarned = Math.round(basePoints * 0.5) + speedBonus + streakBonus;
+        player.streak += 1;
+      } else {
+        player.streak = 0;
+      }
+
       player.answeredCurrent = true;
-      player.lastAnswerScore = 0;
+      player.score += pointsEarned;
+      player.lastAnswerScore = pointsEarned;
+      session.lastActivityAt = Date.now();
+
       await this.redisService.set(
         `game:session:${pin}`,
         this.serialize(session),
         this.SESSION_TTL_SECONDS,
       );
+
       return {
-        success: false,
-        isCorrect: false,
-        pointsEarned: 0,
+        success: true,
+        isCorrect,
+        pointsEarned,
         newScore: player.score,
       };
-    }
-
-    let pointsEarned = 0;
-    if (isCorrect) {
-      const timeRemainingRatio = Math.max(
-        0,
-        (timeLimitMs - timeElapsed) / timeLimitMs,
-      );
-      const basePoints = currentQuestion.points || 1000;
-      const speedBonus = Math.round(basePoints * 0.5 * timeRemainingRatio);
-      const streakBonus = Math.min(player.streak * 50, 250);
-      pointsEarned = Math.round(basePoints * 0.5) + speedBonus + streakBonus;
-      player.streak += 1;
-    } else {
-      player.streak = 0;
-    }
-
-    player.answeredCurrent = true;
-    player.score += pointsEarned;
-    player.lastAnswerScore = pointsEarned;
-    session.lastActivityAt = Date.now();
-
-    await this.redisService.set(
-      `game:session:${pin}`,
-      this.serialize(session),
-      this.SESSION_TTL_SECONDS,
-    );
-
-    return {
-      success: true,
-      isCorrect,
-      pointsEarned,
-      newScore: player.score,
-    };
+    });
   }
 
   async getLeaderboard(pin: string) {

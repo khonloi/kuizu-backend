@@ -146,19 +146,18 @@ export class CoursesService {
       );
     }
 
-    const progress = await this.getUserProgress(userId, courseSlug);
-
-    const isFirstCompletion = !progress.completedLessonIds.includes(lessonId);
     const xpReward = customXp ?? targetLesson.xpReward ?? 15;
-    const xpToAward = isFirstCompletion ? xpReward : 0;
+    const { progress, isFirstCompletion } =
+      await this.progressRepository.completeLessonAtomic(
+        userId,
+        courseSlug,
+        lessonId,
+        xpReward,
+      );
 
-    if (isFirstCompletion) {
-      progress.completedLessonIds.push(lessonId);
-      progress.totalXpEarned += xpToAward;
-      await progress.save();
-      if (xpToAward > 0) {
-        await this.gamificationService.addXp(userId, xpToAward);
-      }
+    const xpToAward = isFirstCompletion ? xpReward : 0;
+    if (isFirstCompletion && xpToAward > 0) {
+      await this.gamificationService.addXp(userId, xpToAward);
     }
 
     return {

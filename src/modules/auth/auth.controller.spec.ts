@@ -54,7 +54,8 @@ describe('AuthController', () => {
 
       const result = await controller.register(registerDto, req, mockResponse);
 
-      expect(result).toBe(authResult);
+      expect((result as any).refreshToken).toBeUndefined();
+      expect(result.accessToken).toBe('access_jwt');
       expect(mockResponse.cookie).toHaveBeenCalledWith(
         'access_token',
         'access_jwt',
@@ -81,7 +82,8 @@ describe('AuthController', () => {
 
       const result = await controller.login(loginDto, req, mockResponse);
 
-      expect(result).toBe(authResult);
+      expect((result as any).refreshToken).toBeUndefined();
+      expect(result.accessToken).toBe('access_jwt');
       expect(mockResponse.cookie).toHaveBeenCalledWith(
         'access_token',
         'access_jwt',
@@ -107,7 +109,8 @@ describe('AuthController', () => {
 
       const result = await controller.refresh(req, '', mockResponse);
 
-      expect(result).toBe(tokens);
+      expect((result as any).refreshToken).toBeUndefined();
+      expect(result.accessToken).toBe('new_access');
       expect(mockAuthService.refreshToken).toHaveBeenCalledWith(
         'cookie_refresh_jwt',
         expect.any(Object),
@@ -130,7 +133,8 @@ describe('AuthController', () => {
         mockResponse,
       );
 
-      expect(result).toBe(tokens);
+      expect((result as any).refreshToken).toBeUndefined();
+      expect(result.accessToken).toBe('new_access');
       expect(mockAuthService.refreshToken).toHaveBeenCalledWith(
         'body_refresh_jwt',
         expect.any(Object),
